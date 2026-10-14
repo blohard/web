@@ -1,0 +1,142 @@
+{
+  "date": "2026-09-07T05:11:31.158Z",
+  "node": "v26.8.1",
+  "latency_ms_per_leg": 25,
+  "revision": "e65e7b9ca71a729ab34a7117d4af9c2baa30952e",
+  "uncommitted_changes": true,
+  "fixture": {
+    "roots": 20,
+    "authors": 20,
+    "replies": 21,
+    "thread": "21",
+    "head": "4042",
+    "confirmations": 2
+  },
+  "scope": "Actual app readers and visible-card gates against a fully ingested index. No DOM, bodies, names, avatars, sponsor list, quotes or custom gates. Fixed chain. Upstream counts include the background follower. Ingestion timed separately. Debug host binary.",
+  "samples": [
+    {
+      "view": "home",
+      "host": "first-tab",
+      "phase": "load",
+      "visible": 20,
+      "data_ms": 35,
+      "settled_ms": 35,
+      "http_requests": 1,
+      "response_bytes": 12877,
+      "api": {
+        "feed": 1
+      },
+      "upstream": {},
+      "ingestion_ms": 1977
+    },
+    {
+      "view": "home",
+      "host": "first-tab",
+      "phase": "refresh",
+      "visible": 20,
+      "data_ms": 28,
+      "settled_ms": 29,
+      "http_requests": 1,
+      "response_bytes": 509,
+      "api": {
+        "changes": 1
+      },
+      "upstream": {},
+      "ingestion_ms": 1977
+    },
+    {
+      "view": "home",
+      "host": "second-tab",
+      "phase": "load",
+      "visible": 20,
+      "data_ms": 34,
+      "settled_ms": 34,
+      "http_requests": 1,
+      "response_bytes": 12877,
+      "api": {
+        "feed": 1
+      },
+      "upstream": {},
+      "ingestion_ms": 1977
+    },
+    {
+      "view": "home",
+      "host": "second-tab",
+      "phase": "refresh",
+      "visible": 20,
+      "data_ms": 29,
+      "settled_ms": 29,
+      "http_requests": 1,
+      "response_bytes": 509,
+      "api": {
+        "changes": 1
+      },
+      "upstream": {},
+      "ingestion_ms": 1977
+    },
+    {
+      "view": "thread",
+      "host": "first-tab",
+      "phase": "load",
+      "visible": 22,
+      "data_ms": 62,
+      "settled_ms": 62,
+      "http_requests": 2,
+      "response_bytes": 15058,
+      "api": {
+        "message": 1,
+        "replies": 1
+      },
+      "upstream": {},
+      "ingestion_ms": 1974
+    },
+    {
+      "view": "thread",
+      "host": "first-tab",
+      "phase": "refresh",
+      "visible": 22,
+      "data_ms": 57,
+      "settled_ms": 57,
+      "http_requests": 2,
+      "response_bytes": 2010,
+      "api": {
+        "changes": 1,
+        "message": 1
+      },
+      "upstream": {},
+      "ingestion_ms": 1974
+    },
+    {
+      "view": "thread",
+      "host": "second-tab",
+      "phase": "load",
+      "visible": 22,
+      "data_ms": 62,
+      "settled_ms": 62,
+      "http_requests": 2,
+      "response_bytes": 15058,
+      "api": {
+        "message": 1,
+        "replies": 1
+      },
+      "upstream": {},
+      "ingestion_ms": 1974
+    },
+    {
+      "view": "thread",
+      "host": "second-tab",
+      "phase": "refresh",
+      "visible": 22,
+      "data_ms": 57,
+      "settled_ms": 57,
+      "http_requests": 2,
+      "response_bytes": 2010,
+      "api": {
+        "changes": 1,
+        "message": 1
+      },
+      "upstream": {},
+      "ingestion_ms": 1974
+    }
+  ]
+}

@@ -1,0 +1,417 @@
+@import "./features/messages/message-layout.css";
+
+/* A spare, text-forward, monospace look: content first, no decoration that
+   does not carry information. Light and dark follow the system. The layout
+   is a timeline app's: a rail on the left, one centered column of posts. */
+
+/* Tokens and theme: the palette, light by default, dark when the system is.
+   A page embedding the discussion widget may pin one with data-theme on the
+   root (embed.ts), which overrides the system either way. */
+:root {
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --bg: #f7f7f2;
+  --key-page-bg: #f4e7c5;
+  --fg: #17170f;
+  --dim: #6a6a60;
+  --border: #d8d8cf;
+  --accent: #2c5f9e; /* the whale's blue, a shade brighter than its body */
+  --danger: #a13d2d;
+  --tint: #ecece4;
+  color-scheme: light dark;
+}
+:root[data-theme="light"] { color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f100e;
+    --key-page-bg: #302718;
+    --fg: #e8e8df;
+    --dim: #8b8b80;
+    --border: #2a2b27;
+    --accent: #8fc4f0; /* its spout, for dark screens */
+    --danger: #e0846f;
+    --tint: #181914;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f100e;
+  --key-page-bg: #302718;
+  --fg: #e8e8df;
+  --dim: #8b8b80;
+  --border: #2a2b27;
+  --accent: #8fc4f0;
+  --danger: #e0846f;
+  --tint: #181914;
+  color-scheme: dark;
+}
+
+/* Base elements: the document, text and links. */
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); }
+body { font: 15px/1.55 var(--mono); }
+#app { min-height: 100vh; }
+/* The signed-out line where a compose box would be; the column already indents it like any paragraph. */
+.connect-prompt .err { display: block; }
+.embed { padding: 0.2rem 0; }
+.embed > p { margin: 0; padding: 0.5rem 1rem; }
+.embed .embed-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; padding: 0.4rem 1rem; border-bottom: 1px dashed var(--border); }
+.embed .embed-bar > * { white-space: nowrap; } /* on a phone the bar wraps in whole pieces, never inside one */
+/* The one control that starts a new comment: a real button, apart from the reply links under each comment. */
+.embed .comment-root { display: inline-block; padding: 0.35rem 0.8rem; border: 1px dashed var(--border); color: var(--fg); font-weight: 600; margin-left: 0.5rem; }
+.embed .comment-root:hover { color: var(--accent); border-color: var(--accent); text-decoration: none; }
+.embed .embed-foot { padding: 0.5rem 1rem 0.6rem; border-top: 1px dashed var(--border); }
+.embed .embed-foot .comment-root { margin-left: 0; }
+.embed .powered { display: inline-flex; align-items: center; gap: 0.3rem; }
+.embed .powered a { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 600; color: var(--fg); }
+.embed .powered a:hover { color: var(--accent); text-decoration: none; }
+.embed .powered img { width: 18px; height: 18px; border-radius: 50%; }
+/* No post sits above the first reply in the frame, so no thread line leads up from it. */
+.embed .embed-bar + article.msg .avatar-col .line.up { display: none; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1, h2, h3 { font-size: 1em; font-weight: 600; margin: 0; }
+p { margin: 0.5rem 0; }
+code { font-family: var(--mono); background: var(--tint); padding: 0 0.3em; }
+
+/* Controls read like terminal affordances: [ label ]. */
+button {
+  font: inherit; color: var(--fg); background: none; border: 0; padding: 0.1rem 0.2rem; cursor: pointer;
+}
+button::before { content: "[ "; color: var(--dim); }
+button::after { content: " ]"; color: var(--dim); }
+button:hover:not(:disabled) { color: var(--accent); }
+button:disabled { color: var(--dim); cursor: default; }
+button.danger:hover:not(:disabled) { color: var(--danger); }
+/* The refresh control when a quiet poll found new posts: filled in the accent, and it pulses a few times when the count first appears. */
+button.fresh { color: var(--bg); background: var(--accent); font-weight: 600; border-radius: 3px; padding: 0.1rem 0.45rem; animation: fresh-pulse 1.4s ease-in-out 3; }
+button.fresh::before, button.fresh::after { color: var(--bg); opacity: 0.7; }
+button.fresh:hover:not(:disabled) { color: var(--bg); filter: brightness(1.1); }
+@keyframes fresh-pulse { 50% { background: var(--tint); color: var(--accent); } }
+@media (prefers-reduced-motion: reduce) { button.fresh { animation: none; } }
+select, textarea, input {
+  font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--border); padding: 0.35rem 0.5rem;
+}
+textarea { width: 100%; resize: none; }
+select { padding: 0.15rem 0.3rem; }
+
+/* Utilities: tone, size, flex rows, and the two inline marks (a name, a member badge). */
+.dim { color: var(--dim); }
+.err { color: var(--danger); }
+.ok { color: var(--accent); }
+.small { font-size: 0.86em; }
+.row { display: flex; gap: 0.75rem; align-items: baseline; flex-wrap: wrap; }
+.grow { flex: 1; }
+.mono-break { word-break: break-all; }
+.name { font-weight: 600; }
+.badge { color: var(--accent); font-size: 0.86em; }
+
+/* Shell: the left rail, the wallet rail on the right, the column and its header; one bar on narrow screens. */
+.shell { display: flex; justify-content: center; gap: 1.5rem; min-height: 100vh; padding: 0 1rem; }
+/* Testnets carry an outlined watermark along the viewport's rising diagonal. It sits
+   above the content, faint, and never takes clicks or selection. */
+.testnet-mark { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; overflow: hidden; pointer-events: none; user-select: none; }
+.testnet-mark span {
+  font: 700 22vw/1 var(--mono); font-size: calc(hypot(100vw, 100vh) * 0.19);
+  color: transparent; -webkit-text-stroke: 2px var(--fg); opacity: 0.09; white-space: nowrap;
+  transform: rotate(-30deg); transform: rotate(calc(-1 * atan2(100vh, 100vw)));
+}
+@media print { .testnet-mark { display: none; } }
+/* Key pages warm the surrounding canvas; reading and controls keep their usual palette. */
+.shell.key-page { background: var(--key-page-bg); }
+.shell.key-page > main.column { background: var(--bg); }
+aside.side {
+  width: 15rem; flex: 0 0 auto; position: sticky; top: 0; height: 100vh; overflow: auto;
+  padding: 1rem 0.25rem; display: flex; flex-direction: column; gap: 1rem;
+}
+aside.side .brand { display: flex; align-items: center; gap: 0.45rem; font-weight: 700; letter-spacing: 0.02em; color: var(--fg); padding: 0 0.5rem; }
+aside.side .brand:hover { text-decoration: none; }
+/* The whale, small and a little faded, in full colour on hover. */
+aside.side .mark { width: 56px; height: 56px; border-radius: 50%; filter: saturate(0.9); }
+aside.side .brand:hover .mark { filter: none; }
+nav.side { display: flex; flex-direction: column; }
+nav.side a { color: var(--fg); padding: 0.3rem 0.5rem; }
+nav.side a::before { content: "  "; white-space: pre; color: var(--dim); }
+nav.side a.active { color: var(--accent); font-weight: 600; }
+nav.side a.active::before { content: "> "; }
+nav.side a:hover { text-decoration: none; background: var(--tint); }
+/* Notifications newer than the newest seen (features/notifications/notification-dot.svelte.ts). */
+aside.side .dot { display: inline-block; width: 0.45rem; height: 0.45rem; margin-left: 0.4rem; border-radius: 50%; background: var(--accent); vertical-align: middle; }
+aside.side .menu-toggle .dot { margin-left: 0.15rem; vertical-align: top; }
+.side-block { padding: 0 0.5rem; display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start; }
+/* The host's notice: present on every page, quiet, under the navigation. */
+.side-block .notice-line { margin: 0.7rem 0 0; max-width: 13rem; line-height: 1.35; font-style: italic; background: var(--tint); padding: 0.4rem 0.5rem; border-radius: 2px; }
+
+aside.right {
+  width: 15rem; flex: 0 0 auto; position: sticky; top: 0; height: 100vh;
+  padding: 0.7rem 0.5rem; display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem;
+}
+.wallet { display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; min-height: 1.9rem; max-width: 100%; }
+/* A long name is trimmed with an ellipsis rather than wrapping or running past the edge. */
+.wallet .account { display: inline-flex; align-items: center; gap: 0.4rem; max-width: 100%; min-width: 0; color: var(--fg); white-space: nowrap; }
+.wallet .account .avatar { flex-shrink: 0; }
+.wallet .account .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wallet .wallet-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.6rem; }
+.wallet-error { text-align: right; max-width: 14rem; }
+.wallet-faucet { text-align: right; margin: 0.2rem 0 0; max-width: 14rem; }
+
+main.column {
+  width: 100%; max-width: 76ch; min-height: 100vh; padding-bottom: 4rem;
+  border-left: 1px dashed var(--border); border-right: 1px dashed var(--border);
+}
+main.column > p, .thread-view > p { padding: 0 1rem; }
+header.colhead {
+  position: sticky; top: 0; z-index: 2; display: flex; gap: 0 0.6rem; align-items: center; flex-wrap: wrap;
+  padding: 0; border-bottom: 1px dashed var(--border);
+  background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(6px);
+}
+/* Rows are spaced by their items' margins, not a row gap. */
+header.colhead > * { margin-block: 0.3rem; }
+header.colhead .back + .scroll-heading button { padding-left: 0; }
+header.colhead .scroll-heading { flex: 1; margin: 0; }
+header.colhead .scroll-heading button { display: flex; flex-wrap: wrap; align-items: center; gap: 0 0.6rem; width: 100%; padding: 0.7rem 1rem; text-align: left; }
+header.colhead .scroll-heading button::before, header.colhead .scroll-heading button::after { content: none; }
+header.colhead .scroll-heading .small { font-weight: 400; }
+header.colhead button.back::before, header.colhead button.back::after { content: none; }
+header.colhead button.back { margin-left: 1rem; padding: 0 0.3rem 0 0; font-size: 1.3em; line-height: 1; }
+/* Floats centred just under the sticky header, or under a tab row still on
+   screen (shared/below-tabs.ts), over the top of the stream: appearing moves
+   nothing at any width and never covers navigation. */
+header.colhead .refresh-control {
+  position: absolute; top: calc(100% + 0.5rem + var(--below-tabs, 0px)); left: 50%; translate: -50% 0; margin: 0;
+  white-space: nowrap; box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+}
+.operation-status { min-height: 1lh; }
+/* Read by screen readers but not drawn: the exact figure behind a shortened one. */
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+/* The rail's menu exists for narrow screens only; wide ones lay its contents out as before. */
+aside.side .menu-toggle, .side-menu .menu-disconnect { display: none; }
+.side-menu { display: contents; }
+
+@media (max-width: 900px) {
+  /* Both rails share one bar above the column: navigation left, wallet right. The wallet takes
+     the space the brand leaves, right-aligned, and never drops to a row of its own. */
+  .shell { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0; padding: 0; }
+  aside.side {
+    position: relative; height: auto; width: auto; overflow: visible; flex-direction: row; flex-wrap: wrap;
+    align-items: center; gap: 0.75rem 1rem; padding: 0.6rem 1rem; border-bottom: 1px dashed var(--border);
+  }
+  aside.right {
+    order: 1; min-width: 0; position: static; height: auto; width: auto;
+    padding: 0.6rem 1rem; border-bottom: 1px dashed var(--border); justify-content: center;
+  }
+  /* The navigation and notice fold behind a menu button and drop down over the page, so the
+     bar, the wallet control included, never moves. */
+  aside.side .menu-toggle { display: inline-block; font-size: 1.4rem; line-height: 1; padding: 0.2rem 0.4rem; }
+  aside.side .menu-toggle::before, aside.side .menu-toggle::after { content: none; }
+  .side-menu .menu-disconnect { display: block; align-self: flex-start; padding: 0.4rem 0.5rem; color: var(--dim); }
+  .wallet .wallet-disconnect { display: none; }
+  .side-menu {
+    display: none; position: absolute; top: 100%; left: 0; width: 100vw; z-index: 40; flex-direction: column; gap: 0.5rem;
+    padding: 0.5rem 1rem 1rem; background: var(--bg); border-bottom: 1px dashed var(--border);
+  }
+  .side-menu.open { display: flex; }
+  main.column { order: 2; grid-column: 1 / -1; border: 0; max-width: none; }
+  /* Anything beyond who is connected (a network switch, the faucet, an error) needs the width:
+     the wallet then takes a full row of its own under the brand, still right-aligned. */
+  .shell:has(aside.right :is(.wallet-actions > button:not(.wallet-disconnect), .wallet-faucet, .wallet-error)) :is(aside.side, aside.right) { grid-column: 1 / -1; }
+  .side-block .notice-line { max-width: none; }
+}
+
+/* A mention: a person, by address, shown under their current name. */
+.message-text a.mention { color: var(--accent); }
+
+/* Quotes: a message embedded by reference, dashed like everything else; the whole card opens the original. */
+.quote { border: 1px dashed var(--border); padding: 0.45rem 0.7rem; margin: 0.5rem 0; background: var(--tint); }
+/* A body that opens or closes with a card needs no extra room around it. */
+.message-text > .quote:first-child { margin-top: 0.15rem; }
+.message-text > .quote:last-child { margin-bottom: 0.15rem; }
+.quote.link { cursor: pointer; }
+.quote .qhead { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.quote .qhead .author { color: var(--fg); font-weight: 600; }
+.quote .qhead .author:hover { text-decoration: none; color: var(--accent); }
+.quote .qbody { margin-top: 0.3rem; }
+
+/* The about page: short sections of prose, comfortable to read. */
+section.about { padding: 0.4rem 1rem 1.5rem; }
+section.about h2, section.keys-about h3 { font-size: 1.1rem; line-height: 1.35; margin: 1.5rem 0 0.5rem; }
+section.about p, section.about li { line-height: 1.5; }
+section.about ul { padding-left: 1.2rem; margin: 0.3rem 0; }
+
+/* Notification reasons carry the separator; their cards opt out of a second one. */
+.ref-line { border-top: 1px dashed var(--border); padding: 0.6rem 1rem 0; }
+
+/* Page blocks: tabs, notices, the profile header, the list page header, a row per person. */
+nav.tabs { display: flex; gap: 1rem; padding: 0.6rem 1rem 0.2rem; }
+nav.tabs button.active { color: var(--accent); font-weight: 600; }
+/* Profile and host-list page tabs; each page keeps its own spacing. */
+nav.page-tabs { gap: 0; padding: 0; border-bottom: 1px solid var(--border); background: var(--tint); }
+nav.page-tabs a {
+  display: flex; align-items: center; justify-content: center; flex: 1 1 auto; min-height: 44px;
+  padding: .7rem .5rem; margin-bottom: -1px; border: 0; border-top: 2px solid transparent;
+  border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  color: var(--dim); text-decoration: none; white-space: pre;
+}
+nav.page-tabs > :last-child { border-right: 0; }
+nav.page-tabs a::before { content: "[ "; }
+nav.page-tabs a::after { content: " ]"; }
+nav.page-tabs .active { background: var(--bg); color: var(--accent); font-weight: 600; border-top-color: var(--accent); border-bottom-color: var(--bg); }
+nav.page-tabs a:hover { color: var(--accent); }
+nav.page-tabs > :focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+
+/* Keyring and trading tabs share their appearance; each view supplies its spacing. */
+.key-tabs { display: flex; gap: 0; padding: 0; border-bottom: 1px solid var(--border); }
+.key-tabs > :is(button, a) { padding: .7rem .8rem; color: inherit; text-decoration: none; }
+.key-tabs > :is(button, a)::before { content: "[ "; color: inherit; }
+.key-tabs > :is(button, a)::after { content: " ]"; color: inherit; }
+.key-tabs > :is(button, a):hover:not(:disabled) { color: var(--accent); }
+.key-tabs > :is(button, a) + :is(button, a) { border-left: 1px solid var(--border); }
+.key-tabs > .active { color: var(--accent); font-weight: 600; background: var(--key-page-bg); box-shadow: inset 0 -2px var(--accent); }
+.key-tabs > :disabled:not(.active) { color: var(--dim); }
+
+.empty { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; padding: 2.5rem 1rem; text-align: center; }
+.empty img { width: 160px; border-radius: 3px; filter: saturate(0.85); opacity: 0.9; }
+.empty p { margin: 0; }
+.notice { border: 1px dashed var(--border); padding: 0.6rem 0.75rem; margin: 0.75rem 1rem; }
+.notice.err { border-color: var(--danger); }
+section.profile { display: flex; gap: 1rem; align-items: center; padding: 1rem; border-bottom: 1px dashed var(--border); }
+.actions-col { display: flex; flex-direction: column; align-items: flex-end; gap: 0.2rem; }
+.person-row { padding: 0.6rem 1rem; border-top: 1px dashed var(--border); align-items: center; }
+
+/* Avatars: the identicon fallback, and a fetched picture in the same frame. */
+svg.avatar { display: block; border: 1px solid var(--border); }
+svg.avatar .bg { fill: var(--tint); }
+svg.avatar .a { fill: var(--accent); }
+svg.avatar .b { fill: var(--dim); }
+img.avatar { object-fit: contain; background: var(--tint); border: 1px solid var(--border); }
+
+/* Existing cards keep their DOM on refresh; only inserted cards get this brief fade. */
+@keyframes post-arrive { from { opacity: 0.45; } to { opacity: 1; } }
+article.msg { animation: post-arrive 180ms ease-out; }
+@media (prefers-reduced-motion: reduce) { article.msg { animation: none; } }
+article.msg.link { cursor: pointer; }
+article.msg.link:hover, article.msg.link:focus-visible { background: var(--tint); outline: none; }
+article.msg .meta { display: flex; gap: 0.4rem; flex-wrap: wrap; font-size: 0.93em; }
+article.msg .meta a.author { color: var(--fg); font-weight: 600; }
+article.msg .body { margin: 0.25rem 0 0.3rem; overflow-wrap: anywhere; }
+article.msg .body > :first-child { margin-top: 0; }
+article.msg .body > :last-child { margin-bottom: 0; }
+article.msg .placeholder { color: var(--dim); font-style: italic; }
+/* The thread's focus and the latest submission stand out without changing card geometry. */
+article.msg.focus, article.msg.selected { background: var(--tint); }
+/* On a tinted post, embedded cards take the page colour so they still stand out. */
+article.msg:is(.focus, .selected, .link:hover, .link:focus-visible) :is(.link-preview, .quote) { background: var(--bg); }
+article.msg .time-full { color: var(--dim); font-size: 0.86em; margin: 0.5rem 0 0.2rem; }
+article.msg .actions { display: flex; flex-wrap: wrap; gap: 1rem; align-items: baseline; font-size: 0.86em; margin-top: 0.25rem; }
+article.msg .actions a.act { color: var(--dim); }
+/* Card actions share the same button reset. */
+article.msg .actions button.act { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: var(--dim); cursor: pointer; }
+article.msg .actions button.act::before, article.msg .actions button.act::after { content: none; }
+article.msg .actions :is(a, button).act:hover { color: var(--accent); }
+/* Reply, quote and reply counts share the same hover and keyboard focus cue. */
+article.msg .actions :is(a, button).act { text-decoration: none; text-underline-offset: .16em; }
+/* Reply counts keep their accent colour among the quieter compose actions. */
+article.msg .actions .act.reply-count { color: var(--accent); }
+article.msg .actions :is(a, button).act:focus-visible { text-decoration: underline; }
+/* Touch browsers can keep :hover after a tap. Only a mouse gets the hover cue. */
+@media (hover: hover) and (pointer: fine) {
+  article.msg .actions :is(a, button).act:hover { text-decoration: underline; }
+}
+article.msg .actions .reply-count.reply-open { position: relative; padding-right: 1.25em; }
+/* Enlarge desktop targets into the existing gaps without moving the labels or cards. */
+@media (min-width: 601px) {
+  article.msg .actions .act.reply-count { padding: .15rem .25rem; margin: -.15rem -.25rem; }
+  article.msg .actions .reply-count.reply-open { padding-right: calc(1.25em + .25rem); }
+}
+.reply-count > .spinner { left: auto; right: 0; border-radius: 0; }
+.expander { padding: 0 1rem 0.5rem 4.1rem; margin-top: -0.2rem; }
+a.more { display: block; padding: 0.6rem 1rem 0.2rem 4.1rem; }
+/* Stream paging spans the column; reply expanders stay inside their cards. */
+.stream-paging { margin-top: 1rem; padding: 1rem; border-top: 1px solid var(--border); background: var(--tint); text-align: center; }
+.stream-paging button { display: block; width: 100%; min-height: 48px; padding: 0.7rem 1rem; border: 1px solid var(--accent);
+  border-radius: 3px; background: var(--bg); color: var(--accent); font-weight: 600; }
+.stream-paging button:hover:not([aria-disabled="true"]) { background: var(--accent); color: var(--bg); }
+.stream-paging button::before, .stream-paging button::after { color: inherit; }
+.stream-paging button[aria-disabled="true"] { color: var(--dim); border-color: var(--border); cursor: wait; }
+.stream-paging p { margin: 0.5rem 0 0; }
+.stream-paging p:first-child { margin: 0; }
+@media (max-width: 600px) { .stream-paging button { min-height: calc(2lh + 1.4rem + 2px); } }
+/* Message bodies: images stay behind a click, the bar above them toggles; remote images are links. */
+article.msg .body img { max-width: 100%; }
+.rec-image-box { margin: 0.4rem 0; }
+/* The picture's bar: framed and tinted with a picture mark, so a post with a picture is seen to have one. */
+.rec-image-bar { display: inline-flex; max-width: 100%; align-items: center; gap: 0.5rem; padding: 0.3rem 0.7rem; border: 1px dashed var(--border);
+  background: var(--tint); border-radius: 3px; }
+.rec-image-bar::before { content: "🖼"; }
+.rec-image-bar .name { color: var(--fg); min-width: 0; overflow-wrap: anywhere; }
+.rec-image-bar button { color: var(--accent); font-weight: 600; flex-shrink: 0; min-width: 17ch; }
+.rec-image-stage { height: 320px; margin-top: .3rem; border: 1px dashed var(--border); display: grid; place-items: center; overflow: auto; color: var(--dim); }
+.rec-image-stage[hidden] { display: none; }
+.rec-image-stage img { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.rec-image-box img.zoomable { cursor: zoom-in; }
+/* A picture over the whole screen: fitted first, natural size and scrollable after a click on it. */
+.lightbox { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.88); cursor: zoom-out; overflow: auto; }
+.lightbox img { max-width: 100vw; max-height: 100vh; object-fit: contain; cursor: zoom-in; }
+.lightbox.natural { display: block; }
+.lightbox.natural img { max-width: none; max-height: none; width: auto; height: auto; margin: auto; cursor: zoom-out; }
+
+/* Composer: sits at the top of the column like a compose box, with its attachment list. */
+.composer { padding: 0.8rem 1rem 0.6rem; border-bottom: 1px dashed var(--border); }
+.composer.reply { border-top: 1px dashed var(--border); }
+.composer .compose-row { display: flex; gap: 0.75rem; align-items: flex-start; }
+.composer .compose-row .avatar { flex-shrink: 0; }
+.composer textarea {
+  border: 1px dashed var(--border); background: var(--tint); padding: 0.5rem 0.6rem;
+  font-size: 1.05em; min-height: 4.6rem;
+  /* Grows with the text to about a third of the screen, then scrolls inside, so the
+     counter and the post button below it stay in view and the page stops following the caret. */
+  max-height: min(40vh, 22rem); overflow-y: auto;
+}
+.composer.reply textarea { min-height: 3rem; }
+.composer textarea::placeholder { color: var(--dim); font-style: italic; }
+.composer textarea:focus { outline: none; border-color: var(--accent); }
+.composer.dragging textarea { border-style: solid; border-color: var(--accent); }
+/* The mention picker: a short list under the box; arrows move, Enter or a click picks. */
+.composer ul.picker { list-style: none; margin: 0.2rem 0 0 3rem; padding: 0.2rem 0; border: 1px dashed var(--border); background: var(--bg); max-width: 24rem; }
+.composer ul.picker li button { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.25rem 0.6rem; text-align: left; }
+.composer ul.picker li button::before, .composer ul.picker li button::after { content: none; }
+.composer ul.picker li button.active { background: var(--tint); color: var(--accent); }
+.composer .row { margin-top: 0.3rem; }
+.composer .status { font-size: 0.86em; margin-top: 0.4rem; }
+.composer ul.attachments { list-style: none; margin: 0.4rem 0 0; padding: 0; }
+.composer ul.attachments li { display: flex; gap: 0.6rem; align-items: baseline; }
+
+/* Reserve the indicator's width and two short status lines across transaction stages. */
+.transaction-status { min-height: 2lh; }
+.transaction-status::before, .spinner {
+  content: ''; display: inline-block; box-sizing: border-box;
+  width: .8em; height: .8em; margin-right: .45em; vertical-align: -.05em;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  visibility: hidden;
+}
+/* A button's brackets are its own ::before and ::after. While it works, its
+   indicator stands in the opening bracket's place, so the button keeps its
+   width and its row cannot wrap. */
+button:has(> .spinner) { position: relative; }
+button.working::before { visibility: hidden; }
+button > .spinner { position: absolute; left: 0; top: 50%; margin: -.4em 0 0; }
+.working.transaction-status::before, .working > .spinner {
+  visibility: visible; animation: transaction-spin .8s linear infinite;
+}
+@keyframes transaction-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .working.transaction-status::before, .working > .spinner { animation: none; }
+}
+
+@media (max-width: 600px) {
+  /* Phones: a smaller mark, roomier taps, no zoom on focus (iOS zooms into fields under 16px),
+     and the profile header wraps instead of squeezing the name.
+     This stays last: it overrides base rules of the same specificity, which win when they come later. */
+  aside.side .mark { width: 40px; height: 40px; }
+  nav.side a::before { content: none; }
+  nav.side a { padding: 0.4rem 0.5rem; }
+  textarea, input, select, .composer textarea { font-size: 16px; }
+  article.msg .actions a.act, article.msg .actions button.act { padding-top: 0.4rem; padding-bottom: 0.4rem; }
+  section.profile { flex-wrap: wrap; }
+  .actions-col { flex-direction: row; width: 100%; gap: 1rem; }
+}

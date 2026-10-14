@@ -1,0 +1,40 @@
+{
+  "name": "blohard-web",
+  "private": true,
+  "version": "0.0.0",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/blohard/web.git" },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && npm run docs",
+    "preview": "vite preview",
+    "check:deployment": "node scripts/check-deployment.mjs",
+    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
+    "abi": "node scripts/abi.mjs",
+    "abi:check": "node scripts/abi.mjs --check",
+    "docs": "node scripts/docs.mjs",
+    "test": "node --test scripts/*.test.mjs src/features/*/tests/*.test.mjs src/shared/tests/*.test.mjs",
+    "load-test": "node scripts/load-test.mjs",
+    "measure:reads": "node scripts/read-costs.mjs",
+    "test:ui": "playwright test",
+    "test:integration": "node scripts/integration/client.mjs && node scripts/integration/account-keys.mjs && node scripts/integration/bot.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "@tsconfig/svelte": "^5.0.8",
+    "@types/node": "^24.13.3",
+    "fake-indexeddb": "^6.2.5",
+    "marked": "^18.0.12",
+    "svelte": "^5.56.10",
+    "svelte-check": "^4.7.6",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2"
+  },
+  "dependencies": {
+    "@coinbase/wallet-sdk": "4.3.6",
+    "linkifyjs": "^4.3.3",
+    "viem": "^2.56.2"
+  }
+}

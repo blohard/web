@@ -1,0 +1,45 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # What a clean checkout runs: types, the Node tests, the build and the
+  # browser suite. None of it needs Foundry or a host or relayer binary.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:ui -- --forbid-only
+
+  # The tracked ABIs must match the contracts pinned under lib/. Foundry is
+  # pinned to the version the contract repositories build with.
+  abis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: forge build --root lib/protocol
+      - run: forge build --root lib/account-keys
+      - run: npm ci
+      - run: npm run abi:check

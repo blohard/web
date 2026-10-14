@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
+    <title>blohard (dev wallet)</title>
+  </head>
+  <body>
+    <!-- The same app as index.html, with a scripted wallet installed first
+         (src/dev/fakeWallet.ts). Served by `vite` only; not part of the build. -->
+    <div id="app"></div>
+    <script type="module" src="/src/dev/fakeWallet.ts"></script>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

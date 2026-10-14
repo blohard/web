@@ -1,0 +1,39 @@
+/* Card geometry: shared by stream previews, threads and notifications. */
+article.msg { --msg-bottom: 0.5rem; border-top: 1px dashed var(--border); padding: 0.8rem 1rem var(--msg-bottom); }
+
+/* Continue through the bottom padding without changing the parent's height. */
+article.msg.connector .avatar-col .line:not(.up) { margin-bottom: calc(-1 * var(--msg-bottom)); }
+article.msg .grid { display: flex; gap: 0.75rem; }
+/* One column width whatever the avatar's size, so the thread line sits at the same x under a focused post's larger avatar as under a reply's. */
+article.msg .avatar-col { position: relative; display: flex; flex-direction: column; align-items: center; flex: 0 0 40px; width: 40px; }
+/* Every avatar has the same offset, with or without an incoming reply line. */
+article.msg .avatar-col > a { margin-top: 0.45rem; }
+article.msg .avatar-col .line { flex: 1; width: 0; border-left: 2px dashed var(--dim); margin-top: 0.4rem; min-height: 0.6rem; }
+/* Draw the upper connector above the avatar without taking up layout space. */
+article.msg .avatar-col .line.up { position: absolute; top: -0.8rem; left: 19px; height: 0.9rem; min-height: 0; margin: 0; }
+article.msg .content { flex: 1; min-width: 0; }
+
+/* A muted or folded author: one collapsed line. */
+article.msg.collapsed { --msg-bottom: 0.4rem; padding-top: 0.5rem; }
+article.msg.collapsed .avatar-gap { display: block; width: 36px; height: 1px; }
+
+/* "in reply to" context above a reply */
+a.context { display: block; color: var(--fg); font-size: 0.86em; margin: 0 0 0.5rem 3rem; padding: 0.25rem 0.6rem;
+  border-left: 2px solid var(--border); text-decoration: none; }
+a.context:hover { border-left-color: var(--accent); text-decoration: none; }
+a.context .who { font-weight: 600; }
+a.context .line { color: var(--dim); }
+/* A conversation label owns the separator; its card has separator={false}. */
+.conversation-context { display: block; position: relative; margin: 0; padding: .4rem 1rem .4rem calc(1rem + 40px + .75rem);
+  color: var(--fg); text-decoration: none; border-top: 1px dashed var(--border); font-size: .86em; }
+.conversation-context::before { content: ''; position: absolute; left: calc(1rem + 19px); top: .4rem; bottom: 0;
+  border-left: 2px dashed var(--dim); }
+.conversation-context:hover { text-decoration: none; }
+.conversation-context:hover::before { border-left-color: var(--accent); }
+
+.row-placeholder { padding: 0.8rem 1rem 0; border-top: 1px dashed var(--border); }
+
+/* Set by the arranging component, independent of focus/scroll wrappers.
+   An open InlineReply interrupts a join. An upper reply stub alone does not
+   remove a separator: siblings are replies too, but are not joined. */
+article.msg.no-separator, .conversation-context.no-separator { border-top: 0; }

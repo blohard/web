@@ -1,0 +1,6 @@
+[submodule "lib/protocol"]
+	path = lib/protocol
+	url = https://github.com/blohard/protocol.git
+[submodule "lib/account-keys"]
+	path = lib/account-keys
+	url = https://github.com/blohard/account-keys.git

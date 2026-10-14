@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
+  <body>
+    <div id="fixture"></div>
+    <script type="module">
+      import { mount } from 'svelte'
+      import { getStatus } from '../../../src/lib/store'
+      import { host } from '../../../src/lib/host.svelte'
+      import { wallet } from '../../../src/lib/wallet.svelte'
+      import Conversation from './Conversation.svelte'
+      import '../../../src/app.css'
+      host.status = await getStatus()
+      wallet.account = window.conversation.account ?? null
+      mount(Conversation, { target: document.getElementById('fixture'), props: window.conversation })
+    </script>
+  </body>
+</html>
