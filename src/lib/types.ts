@@ -7,6 +7,8 @@ export type ChainInfo = {
   contract: Address
   /** Browser-safe RPC URL, or null if the operator published none. */
   public_rpc_url: string | null
+  /** Native gas token; absent on older hosts, which assumed Ether. */
+  native_currency?: { name: string; symbol: string; decimals: number }
   /** Deployment block, published for diagnostics. */
   start_block: number
   /** Configured accepted depth, published for diagnostics. */

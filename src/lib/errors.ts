@@ -63,7 +63,7 @@ export function explain(e: unknown): string {
   }
   const text = err.message ?? ''
   if (/insufficient funds|exceeds the balance/i.test(text)) {
-    return 'this account has no ETH on this chain to pay for gas. get some from a faucet, or ask the host to sponsor you'
+    return 'this account does not have enough funds to pay for gas on this network. add its native token, or use sponsored posting if available'
   }
   if (/HTTP request failed|Failed to fetch|Load failed|took too long|timed out/i.test(text)) {
     return 'could not reach the chain or the host. check your connection and try again'

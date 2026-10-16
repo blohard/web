@@ -16,10 +16,10 @@ export function chainLabel(c: { id: number; name?: string | null }): string {
   return c.name?.trim() || 'another network'
 }
 
-/** Chains whose ETH has no value: public testnets and the local development chains. */
+/** Chains whose native tokens have no value: public testnets and the local development chains. */
 const TESTNETS = new Set([84532, 11155111, 560048, 31337, 31338, 810337, 810338])
 export const isTestnet = (c: ChainInfo): boolean => TESTNETS.has(c.id)
-/** The chain's label, marked when its ETH is not real. */
+/** The chain's label, marked when its native token is not real. */
 export const chainTag = (c: ChainInfo): string => isTestnet(c) ? `${chainLabel(c)} · testnet` : chainLabel(c)
 
 /** A host-relative path becomes a URL on the origin this app was loaded from; an absolute URL is left alone. */
@@ -40,7 +40,7 @@ export function toViemChain(c: ChainInfo): Chain {
   return defineChain({
     id: c.id,
     name: chainLabel(c),
-    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    nativeCurrency: c.native_currency ?? base.nativeCurrency,
     rpcUrls: { default: { http: publicRpcUrl(c) ? [publicRpcUrl(c)!] : [] } },
   })
 }

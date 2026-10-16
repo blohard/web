@@ -79,7 +79,7 @@
   })
   /** The chain the page shows: the one its route names when this host serves it, otherwise the selector's. */
   let shownChain = $derived(routeChain ?? selected)
-  /** The chain on screen spends worthless ETH; the page says so in large outline. */
+  /** The chain on screen spends test tokens; the page says so in large outline. */
   const testnet = $derived(!!shownChain && isTestnet(shownChain))
 
   $effect(() => {
@@ -131,7 +131,7 @@
   <!-- Decorative: the column header names the chain as a testnet in text. -->
   <div class="testnet-mark" aria-hidden="true"><span>testnet</span></div>
 {/if}
-<div class="shell" class:key-page={keyPage}>
+<div class="shell" class:key-page={keyPage} data-chain={shownChain?.id}>
   <Sidebar {keyPage} selected={shownChain} />
 
   <main class="column">

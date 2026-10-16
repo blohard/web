@@ -6,6 +6,15 @@ EVM chains: a Svelte client that reads and posts through a
 [protocol](https://github.com/blohard/protocol) and the rules in
 [CLIENT.md](CLIENT.md). MIT licensed.
 
+## Native gas tokens
+
+Wallet network setup reads `native_currency` (`name`, `symbol`, `decimals`) from
+the host's `/api/status`. Configure it on the host, for example
+`native_currency = { name = "COIN", symbol = "COIN", decimals = 18 }` under
+`[[chains]]`; no frontend build setting or chain-specific code is needed.
+Older hosts that omit it default to Ether/ETH/18. AccountKeys prices and displays
+remain ETH-specific and are available only on their supported chains.
+
 ## Start here
 
 [App.svelte](src/App.svelte) connects routes to pages and supplies the header,
