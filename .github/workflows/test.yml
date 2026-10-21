@@ -15,7 +15,8 @@ jobs:
           submodules: recursive
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: '^24.22.1'
+          check-latest: true
           cache: npm
       - run: npm ci
       - run: npm run check
@@ -37,7 +38,8 @@ jobs:
           version: v1.8.5
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: '^24.22.1'
+          check-latest: true
           cache: npm
       - run: forge build --root lib/protocol
       - run: forge build --root lib/account-keys
