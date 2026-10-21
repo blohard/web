@@ -74,7 +74,6 @@
   let payKey = $derived(`${chain.id}:${wallet.account ?? ''}`)
   let ruleContext = $derived(`${chain.id}:${chain.contract}:${wallet.account ?? ''}`.toLowerCase())
   let replyGate = $derived(box.replyGate(ruleContext))
-  let payMyself = $derived(payFor === payKey)
   let hostBlocked = $derived(host.blocked(wallet.account))
   let dragging = $state(false)
   let preview = $state(false)
@@ -162,10 +161,14 @@
     if (wallet.account) sponsorship.forget(chain, wallet.account)
   }
   let eligible = $derived(eligibility?.eligible === true)
+  // A known sponsorship pause falls back to the wallet. It is not a saved
+  // preference: free posting resumes when the allowance becomes available.
+  let automaticPaid = $derived(!!sponsor && eligible && eligibility?.posting_available === false && payFor !== payKey)
+  let payMyself = $derived(payFor === payKey || automaticPaid)
   let namesEnabled = $derived(sponsor?.name_sponsorship?.ens || sponsor?.name_sponsorship?.basenames)
   let sponsored = $derived(eligible && eligibility?.posting_available !== false && !payMyself)
-  /** Free posting is offered but cannot be used yet, and the author has not chosen to pay: eligibility is unknown, or posting is paused for an eligible author. */
-  let sponsorBlocks = $derived(!!sponsor && !payMyself && (eligibility?.eligible == null || (eligible && eligibility?.posting_available === false)))
+  /** An unanswered check still waits unless the author explicitly chooses to pay. */
+  let sponsorBlocks = $derived(!!sponsor && !payMyself && eligibility?.eligible == null)
   /** The one rule for the post button and the keyboard shortcut. */
   let canSubmit = $derived(!!wallet.account && !frozen && !empty && !overCap && !overReferences && !noStore && !replyRestriction?.kind && !sponsorBlocks)
 
@@ -319,7 +322,7 @@
       <div class:concealed={checkingReply || showOutcome || box.sending}
         inert={checkingReply || showOutcome || box.sending} aria-hidden={checkingReply || showOutcome || box.sending}>
         {#if wallet.account}
-          <SponsorshipStatus entry={eligibility} offered={!!sponsor} {payMyself} {namesEnabled} disabled={locked}
+          <SponsorshipStatus entry={eligibility} offered={!!sponsor} {payMyself} automatic={automaticPaid} {namesEnabled} disabled={locked}
             onToggle={() => { payFor = payMyself ? null : payKey }} onRefresh={refreshSponsorship} />
         {/if}
       </div>

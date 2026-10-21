@@ -16,16 +16,41 @@
   import { expansionOf, RowExpansion } from './stream-expansion'
   import { rememberStream, streamPosition } from '../navigation/stream-position'
   import { visitPlace } from '../navigation/visit-position'
+  import { router } from '../navigation/router.svelte'
   import type { ChainInfo } from '../../lib/types'
   import Empty from '../../shared/Empty.svelte'
   import ConversationRow from './ConversationRow.svelte'
   import Retained from '../../shared/Retained.svelte'
+  import FirstScreenRow from '../../shared/FirstScreenRow.svelte'
+  import KeyActivityRow from '../keys/KeyActivityRow.svelte'
+  import { EveryoneActivity, postActivity, type ActivityPage } from './everyone-activity'
+  import { host } from '../../lib/host.svelte'
+  import { pollVisible } from '../../shared/visible-poll'
 
   // Data reloads include local actions; only reader refreshes advance refreshRevision.
   // `waited` is the opening's wait when a step before the stream, such as reading the keyring, already started it.
-  let { chain, filter, emptyMessage, reloadRevision = 0, refreshRevision = 0, restorePosition = true, topRequest = null, waited, onsettled }: { chain: ChainInfo; filter: Filter; emptyMessage?: string; reloadRevision?: number; refreshRevision?: number; restorePosition?: boolean; topRequest?: { shown: boolean } | null; waited?: () => boolean; onsettled?: (reloadRevision: number, ok: boolean) => void } = $props()
+  let { chain, filter, emptyMessage, reloadRevision = 0, refreshRevision = 0, restorePosition = true, topRequest = null, waited, onsettled, onactivitychange }: { chain: ChainInfo; filter: Filter; emptyMessage?: string; reloadRevision?: number; refreshRevision?: number; restorePosition?: boolean; topRequest?: { shown: boolean } | null; waited?: () => boolean; onsettled?: (reloadRevision: number, ok: boolean) => void; onactivitychange?: (changed: boolean) => void } = $props()
   // Each stream's place in the visit this feed opened in, shared with its page's other tabs.
-  const positions = visitPlace().streams
+  const visit = untrack(() => router.visit)
+  const place = visitPlace()
+  const positions = place.streams
+  const market = $derived(filter.kind === 'timeline' && !filter.curatedOnly ? host.keyringMarket(chain.id) : null)
+  const activity = $derived.by(() => {
+    const current = chain, address = market, key = feedKey(chain, filter)
+    return address ? untrack(() => visit.state(`everyone-activity/${key}/${address}`, () => new EveryoneActivity(current, address))) : null
+  })
+  $effect(() => {
+    const current = activity, changed = onactivitychange
+    if (!current) { changed?.(false); return }
+    const stop = pollVisible(() => current.keys.peek(), value => changed?.(current.keys.changed(value)), () => {}, 30_000, false)
+    return () => { stop(); changed?.(false) }
+  })
+  function enrich(read: Promise<Page>, refresh: boolean, preserve: boolean): Promise<ActivityPage> {
+    const current = activity, revision = current?.keys.revision
+    const result = current ? current.load(read, refresh, preserve) : read.then(postActivity)
+    void result.then(p => { if (activity === current && current?.keys.revision !== revision && !p.keyError) onactivitychange?.(false) }, () => {})
+    return result
+  }
   let entrance = $state.raw<FirstScreen | null>(null)
   provideFirstScreen(() => walk?.base === page ? walk.screen : entrance)
   onDestroy(() => { entrance?.finish(); walk?.screen.finish() })
@@ -66,8 +91,8 @@
   let loaded: string | null = null
   let seenRefresh = untrack(() => refreshRevision)
   const pressed = new WeakSet<Page>()
-  let page = $state.raw<Promise<Page> | null>(null)
-  let gateRefreshReady = $state.raw<Promise<Page> | null>(null)
+  let page = $state.raw<Promise<ActivityPage> | null>(null)
+  let gateRefreshReady = $state.raw<Promise<ActivityPage> | null>(null)
   // This effect starts a read. It never subscribes to the result it updates.
   $effect(() => {
     const key = identity, currentChain = chain, currentFilter = filter, currentReload = reloadRevision, currentRefresh = refreshRevision
@@ -84,9 +109,10 @@
       walk = null
       if (firstLoad) entrance = saved ? null : new FirstScreen()
       const screen = entrance
-      const read = saved
+      const posts = saved
         ? resumeFeed(currentChain, currentFilter, saved.limit)
         : loadFeed(currentChain, currentFilter, { preserveVisibleRows: !firstLoad, preservePreviews: !press })
+      const read = enrich(posts, !saved && (firstLoad || press), !firstLoad)
       if (press) read.then((p) => pressed.add(p), () => {})
       page = read
       if (firstLoad || currentRefresh !== seenRefresh) gateRefreshReady = read
@@ -102,18 +128,18 @@
    * retained view as a refresh, so a later refresh keeps the walked page on
    * screen until it finishes. The reader serializes walks and refreshes.
    */
-  type Walk = { base: Promise<Page>; request: Promise<Page>; looking: boolean; known: Set<bigint>; screen: FirstScreen }
+  type Walk = { base: Promise<ActivityPage>; request: Promise<ActivityPage>; looking: boolean; known: Set<string>; screen: FirstScreen }
   let walk = $state.raw<Walk | null>(null)
   let request = $derived(walk?.base === page ? walk.request : page)
   const paging = $derived(walk?.base === page ? walk : null)
   const pagingBusy = $derived(!!paging && (paging.looking || paging.screen.waiting))
   const pagingSpinner = loadingDelay(() => pagingBusy ? paging!.request : null)
-  async function showOlder(shown: Page) {
+  async function showOlder(shown: ActivityPage) {
     if (!page || pagingBusy) return
     const base = page
-    const request = olderFeed(chain, filter)
+    const request = enrich(olderFeed(chain, filter, shown.limit + 20), false, true)
     const screen = new FirstScreen(true)
-    const current = { base, request, looking: true, screen, known: new Set(shown.rows.slice(0, shown.limit).map(row => row.key)) }
+    const current = { base, request, looking: true, screen, known: new Set(shown.entries.slice(0, shown.limit).map(row => row.key)) }
     walk = current
     try {
       await request
@@ -140,7 +166,8 @@
   {@const w = paging}
   {#if entrance?.waiting}{@render loadingPosts()}{/if}
   <div use:revealStream={w && !w.looking ? w.screen : entrance} inert={entrance?.waiting ?? false} style:visibility={entrance?.waiting ? 'hidden' : undefined} use:rememberStream={{ key: identity, limit: p.limit, restore: restorePosition, topRequest, positions, arrived: pressed.has(p) ? p : undefined }}>
-  {#if p.rows.length === 0 && p.complete}
+  {#if p.keyError}<p class="err small">could not update key activity. <button onclick={() => inPlaceReloadRevision++}>try again</button></p>{/if}
+  {#if p.entries.length === 0 && p.complete}
     <Empty>
       {#if emptyMessage}{emptyMessage}
       {:else if filter.kind === 'following'}posts from accounts you follow and replies to you appear here.
@@ -152,23 +179,27 @@
     </Empty>
   {:else}
     <!-- A conversation keeps its row when a newer reply becomes the group's lead. -->
-    {#each p.rows.slice(0, p.limit) as row (row.key)}
-      {@const staged = !!w?.screen.waiting && !w.known.has(row.key)}
-      <div data-feed-row={row.key} class:staged inert={staged}>
-        <ConversationRow resume={resuming} {gateRefreshReady} reloadKey={page} {chain} page={p} {row} {collapseMuted} rowx={rowOf(row.key)} onchanged={() => inPlaceReloadRevision++} />
+    {#each p.entries.slice(0, p.limit) as entry (entry.key)}
+      {@const staged = !!w?.screen.waiting && !w.known.has(entry.key)}
+      <div data-feed-row={entry.kind === 'post' ? entry.key : undefined} class:staged inert={staged}>
+        {#if entry.kind === 'key'}
+          <FirstScreenRow id={entry.key}><KeyActivityRow event={entry.event} {chain} /></FirstScreenRow>
+        {:else}
+          <ConversationRow resume={resuming} {gateRefreshReady} reloadKey={page} {chain} page={p} row={entry.row} {collapseMuted} rowx={rowOf(entry.row.key)} onchanged={() => inPlaceReloadRevision++} />
+        {/if}
       </div>
     {/each}
     <!-- Stream-wide paging is separate from each card's reply controls.
          Keep the button mounted during a read so keyboard focus stays put. -->
     <nav class="stream-paging" aria-label="stream pagination">
-      {#if p.complete && p.rows.length <= p.limit && !pagingBusy}
+      {#if p.complete && p.entries.length <= p.limit && !pagingBusy}
         <p class="dim small" role="status">you've reached the end of this stream</p>
       {:else}
         <button aria-disabled={pagingBusy} aria-busy={pagingBusy} onclick={() => showOlder(p)}>
           <span class="paging-label" class:working={pagingSpinner()}>show more posts<span class="spinner" aria-hidden="true"></span></span>
         </button>
           <p class="operation-status dim small" role="status">
-            {#if p.rows.length <= p.limit && p.reach}{p.rows.length === 0 ? 'nothing' : 'posts'} back to {shortDate(p.reach)}{/if}
+            {#if p.entries.length <= p.limit && p.reach}{p.entries.length === 0 ? 'nothing' : 'posts'} back to {shortDate(p.reach)}{/if}
           </p>
           {#if pagingSpinner()}<span class="visually-hidden" role="status">loading more posts…</span>{/if}
       {/if}

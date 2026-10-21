@@ -1000,3 +1000,42 @@ test('Everyone checks again on window return when an older poll is still answeri
   await refresh.click()
   await expect(card(page, 2)).toBeVisible()
 })
+
+for (const reply of [false, true]) test(`exhausted free posts automatically use wallet gas for a ${reply ? 'reply' : 'post'}`, async ({ page, host }) => {
+  host.post(1, 'Parent post')
+  await publication(page, host, { parent: reply ? 1 : 0 })
+  let available = false, relayed = 0
+  await page.route('**/eligibility/**', route => route.fulfill({ json: {
+    address: author, eligible: true, reason: 'ens', posting_available: available,
+    posting_paused_reason: available ? null : 'daily allowance used',
+  } }))
+  await page.route('**/api/relay/84532/post*', async route => { relayed++; await route.fallback() })
+  await page.goto('/')
+  await expect(card(page, 1)).toBeVisible()
+  if (reply) await card(page, 1).getByRole('button', { name: '↳ reply', exact: true }).click()
+  const composer = reply ? page.locator('.composer').last() : page.locator('.home-composer .composer')
+  await composer.locator('textarea').fill('My reply after the free allowance is spent')
+  const submit = composer.locator('.post-action')
+  await expect(submit).toBeEnabled()
+  await expect(composer.getByRole('status').filter({ hasText: 'daily allowance used' })).toContainText('you pay gas')
+  await page.evaluate(() => {
+    window.postMethods = []
+    window.rejectPost = true
+    const request = window.ethereum.request.bind(window.ethereum)
+    window.ethereum.request = async args => {
+      if (args.method === 'eth_sendTransaction' || args.method === 'eth_signTypedData_v4') window.postMethods.push(args.method)
+      return request(args)
+    }
+  })
+  await submit.click()
+  await expect.poll(() => page.evaluate(() => window.postMethods)).toEqual(['eth_sendTransaction'])
+  await expect(composer.locator('textarea')).toHaveValue('My reply after the free allowance is spent')
+  expect(relayed).toBe(0)
+  // A restored allowance selects free posting again; automatic fallback is not a saved paid preference.
+  await composer.getByRole('button', { name: /dismiss/ }).click()
+  await expect(composer.getByText('daily allowance used', { exact: false })).toBeVisible()
+  available = true
+  await composer.getByRole('button', { name: /retry/, exact: false }).click()
+  await expect(composer.getByRole('button', { name: /pay my own gas/ })).toBeVisible()
+  await expect(composer.getByText('free via your ENS name')).toBeVisible()
+})

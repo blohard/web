@@ -33,6 +33,8 @@ export type Page = {
   complete: boolean
   /** Time of the oldest fetched post, for the control line; null before any post is fetched. */
   reach: Date | null
+  /** Oldest position scanned; rows below this may still be missing. */
+  scannedThrough?: { block: bigint; log: number } | null
 }
 
 export const FEED_PAGE_SIZE = 20
@@ -44,7 +46,7 @@ type View = {
   held: Map<bigint, Posted>; seen: Set<bigint>; waiting: Map<bigint, Posted[]>
   counts: Map<bigint, number>
   at: api.At | null; cursor: api.Cursor | null; complete: boolean
-  reach: Date | null; unfinished: boolean
+  reach: Date | null; scannedThrough: { block: bigint; log: number } | null; unfinished: boolean
   selection: Selection | null; limit: number; asked: number
   loading: Promise<Page> | null; queue: SerialQueue; quiet: QuietChanges
 }
@@ -61,7 +63,7 @@ export function mountFeed(chain: ChainInfo, filter: Filter, cue: (count: number)
 /** A view as a first visit finds it. */
 function blank(chain: ChainInfo, filter: Filter): View {
   return { chain, filter, policyRevision: host.status?.host_policy?.revision, top: [], inlined: [], replies: [], held: new Map(), seen: new Set(), waiting: new Map(), counts: new Map(),
-    at: null, cursor: null, complete: false, reach: null, unfinished: false,
+    at: null, cursor: null, complete: false, reach: null, scannedThrough: null, unfinished: false,
     selection: null, limit: FEED_PAGE_SIZE, asked: FEED_PAGE_SIZE, loading: null, queue: new SerialQueue(), quiet: new QuietChanges() }
 }
 
@@ -85,7 +87,10 @@ async function older(f: Filter, v: View, chain: ChainInfo, limit: number, preser
     v.cursor = page.next
     v.complete = page.next === null
     const oldest = rows.at(-1)
-    if (oldest) v.reach = new Date(oldest.timestamp * 1000)
+    if (oldest) {
+      v.reach = new Date(oldest.timestamp * 1000)
+      v.scannedThrough = { block: oldest.blockNumber, log: oldest.logIndex }
+    }
     selected = await select(f, v, chain, preservePreviews)
   }
   v.unfinished = false
@@ -273,12 +278,12 @@ async function select(f: Filter, v: View, chain: ChainInfo, preservePreviews = f
     const row = rowKey(f, p)
     const saved = previous.get(row)
     const after = homeStream ? saved ? saved.previewAfter : activity.get(posts[i + 1]?.id) : undefined
-    return prepareRow(f, p, source, {
+    return { ...prepareRow(f, p, source, {
       previewAfter: after,
       newSince: homeStream ? newSince : undefined,
       keep: homeStream && saved ? new Set(saved.cards.map(c => c.post.id)) : undefined,
       isOpen: id => homeStream && branchOpen(key, row, id),
-    })
+    }), activity: activity.get(p.id) ?? p }
   })
   return { rows: profileReplies ? groupProfileReplies(rows, ended) : rows, at: v.at, newSince }
 }
@@ -302,7 +307,7 @@ async function present(f: Filter, v: View, chain: ChainInfo, limit: number, pres
       for (const row of rows) counts.set(row.id, row.replies)
     }
   })().catch(() => {})
-  return { rows: selected.rows, limit, counts, countsReady, complete: v.complete, reach: v.reach }
+  return { rows: selected.rows, limit, counts, countsReady, complete: v.complete, reach: v.reach, scannedThrough: v.scannedThrough }
 }
 
 /**

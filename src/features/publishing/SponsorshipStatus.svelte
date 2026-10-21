@@ -1,10 +1,11 @@
 <script lang="ts">
   import type { SponsorshipEntry } from './sponsorship.svelte'
 
-  let { entry, offered, payMyself, namesEnabled = false, disabled = false, onToggle, onRefresh }: {
+  let { entry, offered, payMyself, automatic = false, namesEnabled = false, disabled = false, onToggle, onRefresh }: {
     entry?: SponsorshipEntry
     offered: boolean
     payMyself: boolean
+    automatic?: boolean
     namesEnabled?: boolean
     disabled?: boolean
     onToggle: () => void
@@ -14,8 +15,8 @@
   let paused = $derived(entry?.eligible === true && entry.posting_available === false)
   let checking = $derived(offered && entry?.eligible == null)
   let via = $derived(entry?.reason === 'ens' ? 'your ENS name' : entry?.reason === 'basename' ? 'your Basename' : 'the curated list')
-  // Paying gas is the default, so the line never says so: it opens with free posting's state only while free posting is in play.
-  let inPlay = $derived(!payMyself && (active || paused || checking || (offered && entry?.eligible === true)))
+  // Explain an automatic paid fallback; an explicit paid choice needs no reminder.
+  let inPlay = $derived(automatic || (!payMyself && (active || paused || checking || (offered && entry?.eligible === true))))
 </script>
 
 <div class="status small dim" aria-live="polite" role="status">
@@ -23,7 +24,7 @@
     {#if active}
       free via {via}
     {:else if paused}
-      <strong>free posting paused</strong> · {entry?.posting_paused_reason ?? 'temporarily unavailable'}
+      <strong>free posting paused</strong> · {entry?.posting_paused_reason ?? 'temporarily unavailable'}{#if automatic} · you pay gas{/if}
     {:else if checking}
       <span class="dim">{entry?.error ? 'free posting check failed' : 'checking free posting…'}</span>
     {:else}
@@ -39,7 +40,7 @@
     {:else if !payMyself && (checking || entry?.eligible)}
       · <button onclick={onToggle} {disabled}>pay my own gas</button>
     {/if}
-    {#if paused && !payMyself}
+    {#if paused && (!payMyself || automatic)}
       · <button class="dim" onclick={onRefresh} {disabled}>retry</button>
     {/if}
   {/if}

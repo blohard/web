@@ -147,6 +147,8 @@ export type ConversationRowData = {
   depthFirst: boolean
   key: bigint
   lead: Posted
+  /** Chain position that ranks this conversation, including selected replies. */
+  activity?: Posted
   /** Automatic-preview cutoff, retained during paging and Back. */
   previewAfter?: Posted
   root: { id: bigint; post: Posted | undefined; drawn: number; joins: boolean; omitted: boolean }

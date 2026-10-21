@@ -35,10 +35,20 @@ guarantees the design intends.
      the account's address, not the key's — and the signature bytes travel to the relayer unchanged,
      whatever their length: the board tries the author's own key first and otherwise lets an author
      with code validate them itself (ERC-1271, SPEC §4.2). The client says plainly who is
-     paying, lets the author choose to pay instead, and offers a paid retry after an explicit
-     refusal. Only a relayer's explicit refusal permits that fallback. A missing or unknown outcome
-     retains the exact signed request for recovery. A later refusal cannot disprove an earlier
-     uncertain send. A relayer's refusal is never a verdict on the post, only on who pays.
+     paying and lets the author choose to pay instead.
+
+     Before sending a sponsored request, a known pause in free posting (including an exhausted
+     allowance) automatically selects wallet-paid mode for posts and replies. Keep the submit
+     button usable, show the pause reason and that the author pays gas, and require the normal
+     wallet confirmation. This automatic choice is not a saved preference: free posting resumes
+     when available unless the author explicitly chose to pay. Unknown eligibility still waits
+     for a successful check or the author's explicit choice to pay.
+
+     After sending a sponsored request, offer a paid retry only after a definite relayer refusal;
+     temporary busy responses remain retryable through the relayer. A missing or unknown outcome
+     retains the exact signed request for recovery and must not offer a paid retry. A later refusal
+     cannot disprove an earlier uncertain send. A relayer's refusal is never a verdict on the post,
+     only on who pays.
 3. Upload the body, then attachments, as soon as the wallet returns the transaction hash, with the
    chain id and that hash as proof. A host that has not yet accepted the message says it is
    **holding** the record: it serves nothing yet and stores the bytes on its own once the chain has

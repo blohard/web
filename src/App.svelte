@@ -53,7 +53,16 @@
 
   $effect(() => {
     const stopRelay = readRelay()
-    const stopStatus = hostStatus.start((s) => { selectedId = initialChainId(s.chains, selectedId) })
+    const stopStatus = hostStatus.start((s) => {
+      const route = router.route
+      // A first visit through a served chain's link also chooses that chain for Home.
+      if (selectedId === null && 'chainId' in route && s.chains.some(c => c.id === route.chainId)) {
+        selectedId = route.chainId
+        writeJSON(STORAGE_KEY, selectedId)
+      } else {
+        selectedId = initialChainId(s.chains, selectedId)
+      }
+    })
     return () => { stopRelay(); stopStatus() }
   })
 
@@ -148,7 +157,7 @@
       </h1>
       {#if status && status.chains.length > 0 && refreshCue.highlighted}
         <!-- Present only when a quiet poll found something to add. It floats under the header, or under a tab row on screen, so nothing moves. -->
-        <button class="refresh-control small fresh" use:belowTabs transition:fly={{ y: -6, duration: reduceMotion ? 0 : 180 }} onclick={refresh} title={refreshCue.changed ? 'keyring changes are waiting. press to show them' : 'new posts are waiting. press to show them'}>
+        <button class="refresh-control small fresh" use:belowTabs transition:fly={{ y: -6, duration: reduceMotion ? 0 : 180 }} onclick={refresh} title={refreshCue.changed ? 'new activity is waiting. press to show it' : 'new posts are waiting. press to show them'}>
           {refreshCue.count === Infinity ? 'refresh · new' : refreshCue.count ? `refresh · ${refreshCue.count} new` : 'refresh'}
         </button>
       {/if}

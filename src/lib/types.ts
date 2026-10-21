@@ -13,7 +13,7 @@ export type ChainInfo = {
   start_block: number
   /** Configured accepted depth, published for diagnostics. */
   confirmations: number
-  /** This host maintains a local curated list, shared across chains. */
+  /** This host offers its shared curated list as a feed and badges on this chain. */
   curated?: boolean
   /** Display policy, independent of reply gates and available during gate validation. */
   blocklist?: { registry: Address; list: string } | null

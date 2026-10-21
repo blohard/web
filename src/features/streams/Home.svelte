@@ -36,6 +36,7 @@
   let { chain, refreshRevision = 0, onstream = () => {} }: { chain: ChainInfo; refreshRevision?: number; onstream?: (selected: (() => Tab) | null) => void } = $props()
 
   let actionReloadRevision = $state(0)
+  let keyActivityChanged = $state(false)
   let feedStatus = $state<'updating' | 'failed' | null>(null)
   let postedReloadRevision: number | null = null
   function reloadAfterPost() {
@@ -117,7 +118,7 @@
   // Opening a keyring view may read the keyring before its stream: one wait covers both.
   // It follows the reader's choice, not the holders-to-holding fallback once the keyring arrives.
   const keyringWait = loadingDelay(() => effective === 'keyring' && wallet.account ? `${keyringIdentity}/${saved.keyringSide}` : null)
-  $effect(() => refreshCue.cueChanges(() => effective === 'keyring' && keyring.changed(keyringView)))
+  $effect(() => refreshCue.cueChanges(() => effective === 'keyring' ? keyring.changed(keyringView) : effective === 'everyone' && keyActivityChanged))
   /** On a narrow bar, the chosen tab is scrolled fully into view, sideways only, so the page never moves. */
   function showActive(bar: HTMLElement, _chosen: Tab) {
     const reveal = () => void settled().then(() => {
@@ -239,7 +240,7 @@
 {:else}
   <!-- The tab leads, since keyring and following can share a filter; the keyring side counts only on its own tab, so it never remounts another. -->
   {#key `${effective === 'keyring' ? keyringView : effective}/${feedKey(chain, filter)}`}
-    <Feed {chain} {filter} {reloadRevision} emptyMessage={effective === 'keyring' ? heldAuthors?.length ? 'no posts from your keyring yet.' : keyringView === 'holders' ? 'no key holders yet.' : 'you hold no keys to other accounts yet.' : undefined} {refreshRevision} waited={effective === 'keyring' ? keyringWait : undefined} onsettled={feedSettled} {restorePosition} topRequest={router.homeTop} />
+    <Feed onactivitychange={changed => keyActivityChanged = changed} {chain} {filter} {reloadRevision} emptyMessage={effective === 'keyring' ? heldAuthors?.length ? 'no posts from your keyring yet.' : keyringView === 'holders' ? 'no key holders yet.' : 'you hold no keys to other accounts yet.' : undefined} {refreshRevision} waited={effective === 'keyring' ? keyringWait : undefined} onsettled={feedSettled} {restorePosition} topRequest={router.homeTop} />
   {/key}
 {/if}
 

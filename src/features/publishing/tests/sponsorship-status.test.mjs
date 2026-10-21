@@ -66,7 +66,7 @@ test('older eligibility-only responses do not promise current availability', asy
   assert.doesNotMatch(html, /free via/)
 })
 
-test('the composer does not silently turn paused sponsorship into a paid post', async () => {
+test('paused sponsorship selects paid posting with a visible explanation and recovers to free', async () => {
   const { load, mock, author, response } = await import('../../../../scripts/harness.mjs')
   const { host } = await load('lib/host.svelte.ts')
   const { wallet } = await load('lib/wallet.svelte.ts')
@@ -82,9 +82,10 @@ test('the composer does not silently turn paused sponsorship into a paid post', 
   const paused = await renderComponent('features/publishing/Composer.svelte', { chain: mock.chain, owner })
   assert.match(paused, /free posting paused/)
   const postButton = html => html.match(/<button[^>]*class="post-action[^"]*"[^>]*>.*?<\/button>/s)?.[0] ?? ''
-  assert.match(postButton(paused), /^<button[^>]*\sdisabled(?:=|\s|>)/)
+  assert.doesNotMatch(postButton(paused), /^<button[^>]*\sdisabled(?:=|\s|>)/)
   assert.match(postButton(paused), /<span[^>]*aria-hidden="false"[^>]*>post<\/span>/)
-  assert.match(paused, /pay my own gas/)
+  assert.match(paused, /you pay gas/)
+  assert.doesNotMatch(paused, /pay my own gas/)
   globalThis.fetch = async () => response({ address: author, ...entry })
   sponsorship.forget(mock.chain, author)
   await sponsorship.require(mock.chain, author)

@@ -20,7 +20,7 @@ class RefreshCue {
       stop: () => { if (this.countedBy === owner) { this.countedBy = null; this.clear() } },
     }
   }
-  // Membership changes can require refresh without adding any posts. The page on
+  // Key activity or membership changes can require refresh without adding posts. The page on
   // screen lends a getter, so the cue is read live and never copied into state.
   private changedBy = $state<(() => boolean) | null>(null)
   get changed() { return this.changedBy?.() ?? false }
