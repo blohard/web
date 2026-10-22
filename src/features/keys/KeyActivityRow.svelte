@@ -7,14 +7,19 @@
   import Avatar from '../../components/Avatar.svelte'
   import Name from '../../components/Name.svelte'
   let { event, chain }: { event: KeyActivity; chain: ChainInfo } = $props()
-  const actor = $derived(event.kind === 'purchase' ? event.buyer : event.from)
+  const actor = $derived(event.kind === 'activation' ? event.creator : event.kind === 'purchase' ? event.buyer : event.from)
   const transaction = $derived(transactionUrl(chain, event.transaction))
 </script>
 <div class="key-activity">
   <Avatar address={actor} size={32} />
   <div>
     <a class="activity-link" href={href.userKeys(chain.id, event.creator)}>
-      <Name address={actor} /> just {event.kind === 'purchase' ? 'bought' : 'transferred'} {event.amount.toLocaleString()} of <Name address={event.creator} />'s keys{#if event.kind === 'transfer'} to <Name address={event.to} />{/if}!
+      <Name address={actor} /> just
+      {#if event.kind === 'activation'}
+        activated account keys{#if event.amount > 0}{' '}and bought {event.amount.toLocaleString()} of their own keys{/if}!
+      {:else}
+        {event.kind === 'purchase' ? 'bought' : 'transferred'} {event.amount.toLocaleString()} of <Name address={event.creator} />'s keys{#if event.kind === 'transfer'} to <Name address={event.to} />{/if}!
+      {/if}
     </a>
     <p class="small dim"><time datetime={new Date(event.timestamp * 1000).toISOString()} title={fullTime(event.timestamp)}>{timeAgo(event.timestamp)}</time>
       {#if transaction} · <a class="transaction" href={transaction} target="_blank" rel="noopener noreferrer">transaction</a>{/if}

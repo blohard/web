@@ -89,3 +89,16 @@ test('an unavailable key index leaves posts readable and its retry recovers', as
   await expect(activity(page)).toHaveCount(1)
   await expect(page.getByText('could not update key activity.')).toHaveCount(0)
 })
+
+
+test('activation cards show initial purchases once, including activation without keys', async ({ page, host }) => {
+  const activation = (block, creator, amount) => ({ ...purchase(block), event: { kind: 'activated', creator, amount } })
+  await configure(page, host, () => ({ items: [purchase(40), activation(30, author, 3), activation(20, stranger, 0)], next: null }))
+  await page.goto('/')
+  await expect(activity(page)).toHaveCount(3)
+  await expect(activity(page).nth(1)).toContainText('alice.eth just activated account keys and bought 3 of their own keys!')
+  await expect(activity(page).nth(2)).toContainText('bob.eth just activated account keys!')
+  await expect(activity(page).nth(2)).not.toContainText('bought')
+  await expect(activity(page).nth(1).getByRole('link').first()).toHaveAttribute('href', `/u/84532/${author}/keys`)
+  await expect(activity(page).first()).toContainText("bob.eth just bought 2 of alice.eth's keys!")
+})

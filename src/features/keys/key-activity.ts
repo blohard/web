@@ -1,4 +1,4 @@
-// Public purchases and transfers. The host replays these from its accepted
+// Public activations, purchases and transfers. The host replays these from its accepted
 // key-market journal; this path never asks a wallet or a chain RPC.
 import { getAddress, isAddress, type Address, type Hex } from 'viem'
 import { integer, request } from '../../lib/api'
@@ -10,9 +10,9 @@ import type { ChainInfo } from '../../lib/types'
 export type KeyPosition = { block: bigint; log: number }
 export type KeyActivity = KeyPosition & {
   creator: Address; amount: number; timestamp: number; transaction: Hex
-} & ({ kind: 'purchase'; buyer: Address } | { kind: 'transfer'; from: Address; to: Address })
+} & ({ kind: 'activation' } | { kind: 'purchase'; buyer: Address } | { kind: 'transfer'; from: Address; to: Address })
 export const keyActivityId = (e: KeyActivity) => `key/${e.block}/${e.log}`
-export const keyActivityAccounts = (e: KeyActivity) => e.kind === 'purchase' ? [e.creator, e.buyer] : [e.creator, e.from, e.to]
+export const keyActivityAccounts = (e: KeyActivity) => e.kind === 'activation' ? [e.creator] : e.kind === 'purchase' ? [e.creator, e.buyer] : [e.creator, e.from, e.to]
 export const visibleKeyActivity = (e: KeyActivity) => !keyActivityAccounts(e).some(a => muted.has(a) || host.blocked(a))
 export const newerPosition = (a: KeyPosition, b: KeyPosition) => a.block === b.block ? b.log - a.log : a.block > b.block ? -1 : 1
 function position(v: any): KeyPosition {
@@ -36,12 +36,13 @@ export async function readKeyActivity(chain: ChainInfo, market: Address, before:
   let previous = before
   const items = r.items.map((n: any): KeyActivity => {
     const p = position(n.position), e = n.event
-    if (!e || !Number.isInteger(e.amount) || e.amount < 1 || e.amount > 0xffff_ffff
+    if (!e || !Number.isInteger(e.amount) || e.amount < (e.kind === 'activated' ? 0 : 1) || e.amount > 0xffff_ffff
       || !Number.isInteger(n.timestamp) || n.timestamp < 0 || n.timestamp > 0xffff_ffff
       || typeof n.transaction !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(n.transaction)
       || p.block > checkpoint.block || (previous && newerPosition(p, previous) <= 0)) throw Error('invalid key activity event')
     previous = p
     const shared = { ...p, creator: address(e.creator), amount: e.amount, timestamp: n.timestamp, transaction: n.transaction as Hex }
+    if (e.kind === 'activated') return { ...shared, kind: 'activation' }
     if (e.kind === 'trade' && e.buy === true) return { ...shared, kind: 'purchase', buyer: address(e.holder) }
     if (e.kind === 'transfer') {
       const from = address(e.from), to = address(e.to)

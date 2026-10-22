@@ -137,3 +137,28 @@ test('a failed activity refresh is retried even after the old snapshot was compl
   assert.equal(retry.keyError, false)
   assert.equal(retry.entries[0].event.log, 2)
 })
+
+
+test('activation cards include an optional initial purchase and link to their own market', async () => {
+  for (const amount of [0, 1, 3]) {
+    globalThis.fetch = async () => Response.json(answer([{ ...purchase(2), event: { kind: 'activated', creator, amount } }]))
+    const [event] = (await readKeyActivity(mock.chain, market)).items
+    assert.equal(event.kind, 'activation')
+    assert.equal(event.amount, amount)
+    const html = await renderComponent('features/keys/KeyActivityRow.svelte', { event, chain: { ...mock.chain, id: 84532 } })
+    const text = html.replace(/<[^>]*>/g, '')
+    assert.match(text, /just activated account keys/)
+    if (amount) assert.ok(text.includes(`activated account keys and bought ${amount} of their own keys!`))
+    else assert.doesNotMatch(text, /bought|0 of/)
+    assert.ok(html.includes(`/u/84532/${creator}/keys`))
+    const keys = new KeyActivityFeed(mock.chain, market)
+    muted.toggle(creator)
+    try { assert.equal((await keys.load(20, false)).items.length, 0) }
+    finally { muted.toggle(creator) }
+    assert.equal(keys.visible().length, 1)
+  }
+  for (const amount of [undefined, -1, 0.5, 0x100000000]) {
+    globalThis.fetch = async () => Response.json(answer([{ ...purchase(2), event: { kind: 'activated', creator, amount } }]))
+    await assert.rejects(readKeyActivity(mock.chain, market), /invalid key activity/)
+  }
+})
