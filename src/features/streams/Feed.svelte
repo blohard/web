@@ -16,7 +16,7 @@
   import { expansionOf, resetExpansion, RowExpansion } from './stream-expansion'
   import { rememberStream, streamPosition } from '../navigation/stream-position'
   import { visitPlace } from '../navigation/visit-position'
-  import { router } from '../navigation/router.svelte'
+  import { router, type HomeRequest } from '../navigation/router.svelte'
   import type { ChainInfo } from '../../lib/types'
   import Empty from '../../shared/Empty.svelte'
   import ConversationRow from './ConversationRow.svelte'
@@ -29,7 +29,7 @@
 
   // Data reloads include local actions; only reader refreshes advance refreshRevision.
   // `waited` is the opening's wait when a step before the stream, such as reading the keyring, already started it.
-  let { chain, filter, emptyMessage, reloadRevision = 0, refreshRevision = 0, restorePosition = true, topRequest = null, waited, onsettled, onactivitychange }: { chain: ChainInfo; filter: Filter; emptyMessage?: string; reloadRevision?: number; refreshRevision?: number; restorePosition?: boolean; topRequest?: { shown: boolean } | null; waited?: () => boolean; onsettled?: (reloadRevision: number, ok: boolean) => void; onactivitychange?: (changed: boolean) => void } = $props()
+  let { chain, filter, emptyMessage, reloadRevision = 0, refreshRevision = 0, restorePosition = true, topRequest = null, waited, onsettled, onactivitychange }: { chain: ChainInfo; filter: Filter; emptyMessage?: string; reloadRevision?: number; refreshRevision?: number; restorePosition?: boolean; topRequest?: HomeRequest | null; waited?: () => boolean; onsettled?: (reloadRevision: number, ok: boolean) => void; onactivitychange?: (changed: boolean) => void } = $props()
   // Each stream's place in the visit this feed opened in, shared with its page's other tabs.
   const visit = untrack(() => router.visit)
   const place = visitPlace()
@@ -66,7 +66,7 @@
   })
   /**
    * Conversations opened in place under their cards, and the choices made inside
-   * them, remembered per stream until the reader explicitly refreshes it.
+   * them, remembered per stream until the reader presses Refresh or Home.
    */
   let expansionRevision = $state(0)
   let expansion = $derived.by(() => { void expansionRevision; return expansionOf(identity) })
@@ -85,7 +85,8 @@
   // load restores a visited stream's limit or starts at twenty. Later loads
   // keep every still-selected row. Explicit Refresh advances `refreshRevision`,
   // resets expansion choices, recalculates previews and returns to the top. Posting, deletion
-  // and retries preserve previews and reload without moving the reader.
+  // and retries preserve previews and reload without moving the reader. A Home
+  // press resets the same choices but reuses the displayed snapshot.
   let resuming = $state(false)
   let loaded: string | null = null
   let seenRefresh = untrack(() => refreshRevision)
@@ -94,13 +95,15 @@
   let gateRefreshReady = $state.raw<Promise<ActivityPage> | null>(null)
   // This effect starts a read. It never subscribes to the result it updates.
   $effect(() => {
-    const key = identity, currentChain = chain, currentFilter = filter, currentReload = reloadRevision, currentRefresh = refreshRevision
+    const key = identity, currentChain = chain, currentFilter = filter, currentReload = reloadRevision, currentRefresh = refreshRevision, home = topRequest
     void inPlaceReloadRevision
     void muted.addresses
     untrack(() => {
       const firstLoad = loaded !== key
       const press = !firstLoad && currentRefresh !== seenRefresh
-      if (press) { resetExpansion(key); expansionRevision++ }
+      const fold = !!home && !home.folded
+      if (home) home.folded = true
+      if (press || fold) { resetExpansion(key); expansionRevision++ }
       loaded = key
       const saved = firstLoad ? streamPosition(key, positions) : undefined
       resuming = !!saved
@@ -109,10 +112,10 @@
       walk = null
       if (firstLoad) entrance = saved ? null : new FirstScreen()
       const screen = entrance
-      const posts = saved
-        ? resumeFeed(currentChain, currentFilter, saved.limit)
+      const posts = (saved || fold) && !press
+        ? resumeFeed(currentChain, currentFilter, saved?.limit, !fold)
         : loadFeed(currentChain, currentFilter, { preserveVisibleRows: !firstLoad, preservePreviews: !press })
-      const read = enrich(posts, !saved && (firstLoad || press), !firstLoad)
+      const read = enrich(posts, !saved && !fold && (firstLoad || press), !firstLoad)
       if (press) read.then((p) => pressed.add(p), () => {})
       page = read
       if (firstLoad || currentRefresh !== seenRefresh) gateRefreshReady = read

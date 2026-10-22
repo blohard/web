@@ -405,7 +405,7 @@ type LoadOptions = {
   limit?: number
   /** Extend the limit to keep previously displayed rows when newer ones arrive. */
   preserveVisibleRows?: boolean
-  /** Local updates keep previews; only explicit Refresh may fold them anew. */
+  /** Local updates keep previews; explicit Refresh and Home may fold them anew. */
   preservePreviews?: boolean
 }
 
@@ -454,7 +454,7 @@ async function look(chain: ChainInfo, filter: Filter, want: 'newer' | 'older' | 
         selected = await afresh(filter, view, chain, shown, preservePreviews)
       }
     }
-    if (!selected) selected = await select(filter, view, chain, want === 'resume' || preservePreviews)
+    if (!selected) selected = await select(filter, view, chain, preservePreviews)
     const page = await present(filter, view, chain, shown, preserveVisibleRows, selected)
     if (key === mounted?.key) mounted.cue(feedCue(chain, filter))
     return page
@@ -467,7 +467,7 @@ async function look(chain: ChainInfo, filter: Filter, want: 'newer' | 'older' | 
 /** Read current posts; preserve the displayed range unless opening a new visit. */
 export const loadFeed = (chain: ChainInfo, filter: Filter, { limit = FEED_PAGE_SIZE, preserveVisibleRows = true, preservePreviews = false }: LoadOptions = {}): Promise<Page> => look(chain, filter, 'newer', { limit, preserveVisibleRows, preservePreviews })
 /** Rebuild the displayed rows from the retained view without advancing its change cursor. */
-export const resumeFeed = (chain: ChainInfo, filter: Filter, limit = FEED_PAGE_SIZE): Promise<Page> => look(chain, filter, 'resume', { limit, preserveVisibleRows: false })
+export const resumeFeed = (chain: ChainInfo, filter: Filter, limit = views.get(feedKey(chain, filter))?.limit ?? FEED_PAGE_SIZE, preservePreviews = true): Promise<Page> => look(chain, filter, 'resume', { limit, preserveVisibleRows: false, preservePreviews })
 
 /** The quiet scan belongs to the displayed snapshot, so its cue survives leaving the page. */
 export const feedCue = (chain: ChainInfo, filter: Filter): number => {

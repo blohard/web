@@ -139,12 +139,16 @@ export const href = {
   user: (chainId: number, address: Address) => at(`/u/${chainId}/${address}`),
 }
 
+/** Scroll and reply reset are consumed independently, once per Home press. */
+export type HomeRequest = { shown: boolean; folded: boolean }
+
 class Router {
   private visits = new Visits(100, pageOf(currentRoute()), typeof location === 'undefined' ? '/' : here())
   visit = $state.raw(this.visits.current)
   route = $state<Route>(currentRoute())
-  /** An already-selected Home press scrolls without refreshing its feed. */
-  homeTop = $state.raw<{ shown: boolean } | null>(null)
+  /** A Home press scrolls and resets reply choices without refreshing its feed. */
+  homeTop = $state.raw<HomeRequest | null>(null)
+  private pendingHome = false
   /** Pages left, Back and Forward included: an action waiting on a page is void once this moves. */
   leaves = 0
   private pendingResume = false
@@ -175,7 +179,8 @@ class Router {
       } else if (this.pendingTop) toTop()
       this.visit = this.visits.move(history.state?.blohard, samePage, pageOf(next), this.pendingResume, here())
       history.replaceState({ ...history.state, blohard: this.visits.entry }, '')
-      this.homeTop = null
+      this.homeTop = this.pendingHome && next.kind === 'home' ? { shown: false, folded: false } : null
+      this.pendingHome = false
       this.pendingResume = false
       this.pendingTop = false
       this.route = next
@@ -239,9 +244,12 @@ class Router {
 
   home() {
     if (this.route.kind === 'home') {
-      this.homeTop = { shown: false }
+      this.homeTop = { shown: false, folded: false }
       toTop()
-    } else this.nav(href.home())
+    } else {
+      this.pendingHome = true
+      this.nav(href.home())
+    }
   }
 
   /** The page arrow restores the previous page as a new, independently restorable browser entry. */

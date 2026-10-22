@@ -179,7 +179,7 @@ test('Home resumes its visit; pressing it again scrolls without refreshing', asy
   router.home(); b.input('hashchange')
   assert.equal(router.route.kind, 'home')
   assert.notEqual(router.visit, visit, 'the sidebar resumes Home in its own history entry')
-  assert.equal(router.homeTop, null, 'the copied visit already starts at the top')
+  assert.deepEqual(router.homeTop, { shown: false, folded: false }, 'the returning feed consumes the Home reset')
   history.back()
   assert.equal(router.route.kind, 'thread')
   history.forward()
