@@ -68,7 +68,12 @@ an explicit choice, or silently to restore that chosen wallet. They own transpor
 owns the selected provider, displayed account, prompt limits and local disconnect.
 A stored choice is never an account or authorization. A saved remote choice takes
 precedence over an injected provider; events from unselected providers are ignored.
-Explicit disconnect closes the chosen SDK session and prevents silent restoration.
+An empty account list (wallet lock or revoked access) keeps the last verified
+account for browsing in the open tab. It grants no signing permission: each
+wallet action rechecks access, requests it only on that action if missing, and
+stops if a different account is selected. Signing checks live access again.
+The browsing address is not persisted across reloads. Explicit disconnect clears
+it, closes the chosen SDK session and prevents silent restoration.
 Initialization stays shared after a timeout, but late results cannot select a wallet.
 SDK analytics are disabled, and RPC configuration uses only public URLs.
 

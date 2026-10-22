@@ -49,6 +49,7 @@ export class Wallet {
    */
   provider = $state.raw<Eip1193Provider | undefined>()
 
+  /** Last wallet-confirmed account for browsing in this tab; signing checks live access. */
   account = $state<Address | null>(null)
   /** The connected account is `address`: false without a wallet or an address. */
   is(address: string | null | undefined): boolean {
@@ -188,7 +189,7 @@ export class Wallet {
         if (this.provider !== p) return
         const list = accounts as string[]
         this.generation++
-        if (!this.disconnected && !this.connecting) this.setAccount(list.length ? getAddress(list[0]) : null)
+        if (!this.disconnected && !this.connecting && list.length) this.setAccount(getAddress(list[0]))
       })
       p.on('chainChanged', (id) => {
         if (this.provider !== p) return
@@ -349,18 +350,9 @@ export class Wallet {
       // Something newer arrived while the wallet was answering: the answer is
       // out of date, and what arrived is the truth.
       if (seen !== this.generation || this.busy || p !== this.provider) return
-      let account = accounts.length ? getAddress(accounts[0]) : null
-      // A wallet coming back from the background (MetaMask's phone browser)
-      // can briefly report no accounts. A real sign-out also arrives as
-      // accountsChanged, so a silent read that loses the account is checked
-      // again before the page believes it. Either way the chain read above
-      // still applies: a network change missed in the background shows now.
-      if (account === null && this.account !== null) {
-        const again = await this.recheckAccount(p, seen)
-        if (again === undefined) return
-        account = again
-      }
-      this.setAccount(account)
+      // Empty accounts can mean a locked wallet or revoked access. Keep the
+      // browsing identity; only an explicit disconnect forgets it in this tab.
+      if (accounts.length) this.setAccount(getAddress(accounts[0]))
       if (chainId !== this.chainId) {
         this.chainId = chainId
         this.rpcHealthy = null
@@ -368,25 +360,6 @@ export class Wallet {
     } catch {
       // A wallet that will not answer right now keeps what the page has.
     }
-  }
-
-  /** Milliseconds between re-reads when a silent read suddenly finds no account. Short in tests. */
-  recheckDelaysMs = [1000, 3000]
-
-  /**
-   * The account after a few re-reads: the one that reappears, or null when it
-   * stays missing (a sign-out). Undefined when a newer read, event or prompt
-   * took over, whose answer is the truth instead.
-   */
-  private async recheckAccount(p: Eip1193Provider, seen: number): Promise<Address | null | undefined> {
-    for (const ms of this.recheckDelaysMs) {
-      await new Promise((resolve) => setTimeout(resolve, ms))
-      if (seen !== this.generation || this.busy || p !== this.provider) return undefined
-      const again = (await p.request({ method: 'eth_accounts' })) as string[]
-      if (seen !== this.generation || this.busy || p !== this.provider) return undefined
-      if (again.length) return getAddress(again[0])
-    }
-    return null
   }
 
   private signOut(value: boolean): void {
@@ -550,7 +523,23 @@ export class Wallet {
    * a wallet that cannot read this chain still signs for it.
    */
   async ensureChain(chain: ChainInfo, rpc: RpcNeed = 'required'): Promise<void> {
+    const expected = this.account
     await this.prompt(async (p) => {
+      // A remembered browsing account is not signing permission. Only a
+      // reader's action may prompt to unlock or restore wallet access.
+      if (expected) {
+        const seen = this.generation
+        let accounts = await withTimeout(p.request({ method: 'eth_accounts' }), this.probeTimeoutMs,
+          () => new Error('the wallet account check timed out. try again')) as string[]
+        if (!Array.isArray(accounts)) throw new Error('the wallet returned an invalid account list')
+        if (!accounts.length) accounts = await this.answered(p, { method: 'eth_requestAccounts' }) as string[]
+        const active = Array.isArray(accounts) && accounts.length ? getAddress(accounts[0]) : null
+        if (!active) throw new Error('the wallet reports no connected account. unlock it and try again')
+        if (seen === this.generation) this.setAccount(active)
+        if (!sameAddress(active, expected) || this.account !== expected) {
+          throw new Error('the wallet is set to a different account. check the selected account and try again')
+        }
+      }
       if (this.chainId !== chain.id) {
         try {
           await this.answered(p, { method: 'wallet_switchEthereumChain', params: [{ chainId: numberToHex(chain.id) }] })

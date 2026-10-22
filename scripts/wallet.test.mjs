@@ -240,7 +240,7 @@ for (const synchronous of [false, true]) test(`a failed half of a background che
   }
 })
 
-test('a hung account recheck is shared and cannot overwrite an announced account', { timeout: 2000 }, async t => {
+test('a hung read after an empty account list is shared and cannot overwrite an announced account', { timeout: 2000 }, async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const held = deferred(), listeners = {}
   let accounts = 0
@@ -249,15 +249,15 @@ test('a hung account recheck is shared and cannot overwrite an announced account
     return ++accounts === 1 ? [author] : accounts === 2 ? [] : held.promise
   } })
   await w.resync()
+  await w.resync()
+  assert.equal(w.account, author, 'the empty read keeps browsing')
   const check = w.resync()
   await new Promise(setImmediate)
-  t.mock.timers.tick(1000)
-  await new Promise(setImmediate)
   assert.equal(accounts, 3)
-  t.mock.timers.tick(5000)
+  t.mock.timers.tick(6000)
   await check
   await w.resync()
-  assert.equal(accounts, 3, 'the unanswered recheck still owns the flight')
+  assert.equal(accounts, 3, 'the unanswered read still owns the flight')
   listeners.accountsChanged([address('77')])
   held.resolve([author])
   await new Promise(setImmediate)
@@ -383,7 +383,7 @@ test('a page that uses no wallet asks nothing of one, injected, announced, late 
   } finally { delete globalThis.localStorage }
 }))
 
-test('a silent read that briefly loses the account keeps it, and a lasting loss signs out', async () => {
+test('silent empty account reads preserve the browsing account without prompting', async () => {
   let answers = [[author], [], [author]]
   const provider = {
     on: () => {},
@@ -394,14 +394,13 @@ test('a silent read that briefly loses the account keeps it, and a lasting loss 
     },
   }
   const w = new Wallet(provider)
-  w.recheckDelaysMs = [10, 10]
   await w.resync()
   assert.equal(w.account, author)
   await w.resync()
   assert.equal(w.account, author, 'a wallet waking up from the background is not a sign-out')
   answers = [[]]
   await w.resync()
-  assert.equal(w.account, null, 'still empty after the re-reads: signed out')
+  assert.equal(w.account, author, 'a locked wallet keeps the browsing account')
 })
 
 test('a wallet that blinks out on return still reports the network it changed to in the background', async () => {
@@ -415,7 +414,6 @@ test('a wallet that blinks out on return still reports the network it changed to
     },
   }
   const w = new Wallet(provider)
-  w.recheckDelaysMs = [10, 10]
   await w.resync()
   assert.equal(w.chainId, Number(chainHex()))
   // The network changed while the page was in the background and its event was missed.
@@ -453,11 +451,11 @@ test('an account arriving where there was none is announced once; a switch betwe
   assert.equal(arrivals, 1, 'another account is not an arrival')
   handlers.accountsChanged([])
   handlers.accountsChanged([author])
-  assert.equal(arrivals, 2, 'an account after none, from the wallet itself')
+  assert.equal(arrivals, 1, 'unlocking is not a fresh site connection')
   stop()
   handlers.accountsChanged([])
   handlers.accountsChanged([author])
-  assert.equal(arrivals, 2, 'a stopped listener hears nothing')
+  assert.equal(arrivals, 1, 'a stopped listener hears nothing')
 })
 
 test('a connect the wallet never answers gives the button back', async () => {
@@ -557,4 +555,83 @@ test('a network switch or add the wallet never answers gives the wallet back, an
     await new Promise((r) => setTimeout(r, 30))
     assert.equal(asked.length, before, `${hang}: the abandoned switch asks nothing more`)
   }
+})
+
+
+test('locking preserves browsing, a wallet action unlocks, and explicit disconnect clears the account', async () => {
+  const handlers = {}, calls = []
+  let accounts = [author], approval = [author]
+  const provider = { on(name, fn) { handlers[name] = fn }, async request({ method }) {
+    calls.push(method)
+    if (method === 'eth_accounts') return accounts
+    if (method === 'eth_chainId') return chainHex()
+    if (method === 'eth_requestAccounts') {
+      accounts = approval
+      handlers.accountsChanged(accounts)
+      return accounts
+    }
+    if (method === 'wallet_revokePermissions') { accounts = []; return null }
+    throw Error(`unexpected ${method}`)
+  } }
+  const w = new Wallet(provider)
+  await w.resync()
+  accounts = []; handlers.accountsChanged([])
+  await w.resync()
+  assert.equal(w.account, author)
+  assert.equal(calls.includes('eth_requestAccounts'), false, 'browsing never opens the wallet')
+  await w.ensureChain(mock.chain, 'optional')
+  assert.equal(calls.filter(m => m === 'eth_requestAccounts').length, 1)
+  assert.equal(w.account, author)
+  accounts = []; handlers.accountsChanged([])
+  approval = [address('77')]
+  await assert.rejects(w.ensureChain(mock.chain, 'optional'), /different account/)
+  assert.equal(w.account, address('77'))
+  await w.disconnect()
+  handlers.accountsChanged([author])
+  await w.resync()
+  assert.equal(w.account, null)
+})
+
+for (const outcome of ['rejected', 'empty', 'timeout']) test(`an unlock that is ${outcome} stops the action and keeps browsing`, async () => {
+  let accounts = [author]
+  const calls = [], handlers = {}
+  const w = new Wallet({ on(name, fn) { handlers[name] = fn }, async request({ method }) {
+    calls.push(method)
+    if (method === 'eth_accounts') return accounts
+    if (method === 'eth_chainId') return chainHex()
+    if (method === 'eth_requestAccounts') {
+      if (outcome === 'empty') return []
+      if (outcome === 'timeout') return new Promise(() => {})
+      throw Object.assign(Error('user rejected'), { code: 4001 })
+    }
+    throw Error(`unexpected ${method}`)
+  } })
+  await w.resync()
+  accounts = []; handlers.accountsChanged([])
+  w.connectTimeoutMs = 10
+  await assert.rejects(w.ensureChain(mock.chain), /rejected|no connected account|did not answer/)
+  assert.equal(w.account, author)
+  assert.equal(w.busy, false)
+  assert.equal(calls.includes('eth_blockNumber'), false, 'no transaction preparation without account access')
+})
+
+
+for (const event of [false, true]) test(`a different account discovered during an action stops it (${event ? 'event' : 'silent read'})`, async () => {
+  const handlers = {}, held = deferred(), calls = []
+  let hold = false
+  const w = new Wallet({ on(name, fn) { handlers[name] = fn }, async request({ method }) {
+    calls.push(method)
+    if (method === 'eth_chainId') return chainHex()
+    if (method === 'eth_accounts') return hold ? held.promise : [author]
+    throw Error(`unexpected ${method}`)
+  } })
+  await w.resync()
+  hold = true
+  const action = w.ensureChain(mock.chain)
+  await new Promise(setImmediate)
+  if (event) handlers.accountsChanged([address('77')])
+  held.resolve(event ? [author] : [address('77')])
+  await assert.rejects(action, /different account/)
+  assert.equal(w.account, address('77'), 'a stale read cannot overwrite the account switch')
+  assert.equal(calls.includes('eth_blockNumber'), false)
 })

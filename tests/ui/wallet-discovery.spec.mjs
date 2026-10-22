@@ -3,7 +3,10 @@ import { test, expect, author, stranger } from './host.mjs'
 async function wallets(page) {
   await page.addInitScript(({ author, stranger }) => {
     const calls = [], listeners = new Map()
-    window.walletTest = { calls, fail: null, announcements: 0 }
+    window.walletTest = { calls, fail: null, announcements: 0,
+      lock() { localStorage.removeItem('test.MetaMask'); for (const fn of listeners.get('MetaMask:accountsChanged') ?? []) fn([]) },
+      unlock() { localStorage.setItem('test.MetaMask', 'yes'); for (const fn of listeners.get('MetaMask:accountsChanged') ?? []) fn([author]) },
+    }
     function provider(name, who) {
       return {
         on(event, fn) { listeners.set(`${name}:${event}`, [...(listeners.get(`${name}:${event}`) ?? []), fn]) },
@@ -82,4 +85,35 @@ test('authorization errors identify the failed step and allow retry with another
   await page.getByRole('button', { name: /connect a wallet/ }).click()
   await page.getByRole('button', { name: /Other · browser wallet/ }).click()
   await expect(page.getByRole('textbox')).toBeVisible()
+})
+
+
+test('MetaMask lock keeps the composer and browsing account until explicit disconnect', async ({ page, host }) => {
+  host.post(1, 'read while locked')
+  await wallets(page)
+  await page.goto('/')
+  await page.getByRole('button', { name: /connect a wallet/ }).click()
+  await page.getByRole('button', { name: /MetaMask · browser wallet/ }).click()
+  const composer = page.getByRole('textbox')
+  await expect(composer).toBeVisible()
+  await composer.fill('keep this draft through locking')
+  const prompts = () => page.evaluate(() => window.walletTest.calls.filter(m => m === 'MetaMask:eth_requestAccounts').length)
+  expect(await prompts()).toBe(1)
+  await page.evaluate(() => { window.walletTest.lock(); window.dispatchEvent(new Event('focus')) })
+  await expect(composer).toHaveValue('keep this draft through locking')
+  await expect(page.getByRole('button', { name: /disconnect/ }).filter({ visible: true })).toBeVisible()
+  expect(await prompts()).toBe(1)
+  await page.evaluate(() => { window.walletTest.fail = 'eth_requestAccounts' })
+  await page.getByRole('button', { name: '[ post ]', exact: true }).click()
+  await expect.poll(prompts).toBe(2)
+  await expect(page.locator('.composer .err')).toBeVisible()
+  await expect(composer).toHaveValue('keep this draft through locking')
+  await page.evaluate(() => { window.walletTest.fail = null; window.walletTest.unlock() })
+  await expect(composer).toHaveValue('keep this draft through locking')
+  await page.evaluate(() => window.walletTest.lock())
+  await page.getByRole('button', { name: /disconnect/ }).filter({ visible: true }).click()
+  await expect(page.getByRole('button', { name: /connect a wallet/ })).toBeVisible()
+  await page.evaluate(() => window.walletTest.unlock())
+  await expect(page.getByRole('button', { name: /connect a wallet/ })).toBeVisible()
+  await expect(composer).toHaveCount(0)
 })

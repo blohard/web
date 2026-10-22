@@ -19,7 +19,7 @@ export async function assertActive(provider: Eip1193Provider, account: Address):
   const accounts = await withTimeout(provider.request({ method: 'eth_accounts' }), 6000,
     () => new Error('the wallet account check timed out. try again'))
   const active = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : null
-  if (active === null) throw new Error('the wallet reports no connected account. reconnect it and try again')
+  if (active === null) throw new Error('the wallet reports no connected account. unlock or reconnect it and try again')
   if (active.toLowerCase() !== account.toLowerCase()) {
     throw new Error('the wallet is set to a different account than the one connected here. switch accounts in the wallet or reconnect')
   }
