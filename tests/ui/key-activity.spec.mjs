@@ -29,7 +29,7 @@ test('Everyone interleaves purchases and transfers; whole cards open the key own
   await page.goto('/')
   await expect(activity(page)).toHaveCount(2)
   await expect(activity(page).nth(1)).toContainText("bob.eth just bought 2 of alice.eth's keys!")
-  await expect(activity(page).first()).toContainText('just transferred 1 of')
+  await expect(activity(page).first()).toContainText("bob.eth just transferred 1 of alice.eth's keys to alice.eth!")
   await expect(card(page, 20)).toBeVisible()
   expect(await page.locator('[data-feed-row]').evaluateAll(nodes => nodes.map(n => n.dataset.feedRow).filter(x => x.startsWith('key/') || x === '20'))).toEqual(['key/40/1', 'key/30/1', '20'])
   // The card's padding hits the same link as its text, without a wallet action.

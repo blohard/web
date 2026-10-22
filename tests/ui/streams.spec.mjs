@@ -824,7 +824,7 @@ for (const direct of [false, true]) test(`following ${direct ? 'keeps direct rep
   for (const id of [345, 522, 530, 531]) await expect(card(page, id)).toHaveCount(1)
 })
 
-for (const curated of [false, true]) test(`${curated ? 'curated' : 'following'} trims old automatic replies on refresh but preserves an explicitly opened branch`, async ({ page, host }) => {
+for (const curated of [false, true]) test(`${curated ? 'curated' : 'following'} resets explicit reply expansion on Refresh but not polling`, async ({ page, host }) => {
   if (curated) host.policy([author])
   host.post(230, 'Old conversation')
   host.post(232, 'Old branch', { parent: 230 })
@@ -843,13 +843,14 @@ for (const curated of [false, true]) test(`${curated ? 'curated' : 'following'} 
   const refresh = page.getByRole('button', { name: /refresh.*new/ })
   await expect(refresh).toBeVisible()
   await expect(card(page, 280)).toBeVisible()
+  await expect(card(page, 243)).toBeVisible()
   await refresh.click()
   await expect(card(page, 514)).toBeVisible()
   await expect(card(page, 280)).toHaveCount(0)
-  await expect(card(page, 232)).toBeVisible()
-  await expect(card(page, 243)).toBeVisible()
+  await expect(card(page, 232)).toHaveCount(0)
+  await expect(card(page, 243)).toHaveCount(0)
   await expect(card(page, 386)).toBeVisible()
-  await expect(card(page, 230).getByRole('button', { name: '1 more reply', exact: true })).toBeVisible()
+  await expect(card(page, 230).getByRole('button', { name: '2 more replies', exact: true })).toBeVisible()
 })
 
 
@@ -918,7 +919,7 @@ test('Everyone folds old reply previews on initial load and can expand them', as
 })
 
 
-test('Refresh keeps an explicitly opened context card and its replies in Everyone', async ({ page, host }) => {
+test('Refresh folds an old expanded context branch in Everyone and keeps new reply context', async ({ page, host }) => {
   await publication(page, host)
   host.post(1, 'Another author’s conversation', { who: stranger })
   host.post(2, 'Context parent', { who: stranger, parent: 1 })
@@ -930,12 +931,13 @@ test('Refresh keeps an explicitly opened context card and its replies in Everyon
   await card(page, 2).getByRole('button', { name: '1 reply', exact: true }).click()
   await expect(card(page, 3)).toBeVisible()
   host.post(4, 'Next conversation', { who: stranger })
-  host.post(5, 'Recent reply', { parent: 1 })
+  host.post(5, 'Recent reply', { parent: 2 })
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
   await page.getByRole('button', { name: /refresh.*new/ }).click()
   await expect(card(page, 5)).toBeVisible()
-  for (const id of [2, 3]) await expect(card(page, id)).toBeVisible()
-  await expect(card(page, 2).getByRole('button', { name: 'hide replies', exact: true })).toBeVisible()
+  await expect(card(page, 2)).toBeVisible()
+  await expect(card(page, 3)).toHaveCount(0)
+  await expect(card(page, 2).getByRole('button', { name: '1 more reply', exact: true })).toBeVisible()
 })
 
 
@@ -1038,4 +1040,30 @@ for (const reply of [false, true]) test(`exhausted free posts automatically use 
   await composer.getByRole('button', { name: /retry/, exact: false }).click()
   await expect(composer.getByRole('button', { name: /pay my own gas/ })).toBeVisible()
   await expect(composer.getByText('free via your ENS name')).toBeVisible()
+})
+
+
+test('Following Refresh closes manually opened unfollowed replies and forgets nested choices', async ({ page, host }) => {
+  host.post(1, 'Followed conversation')
+  host.post(2, 'Unfollowed answer', { who: stranger, parent: 1 })
+  host.post(3, 'Unfollowed nested answer', { who: stranger, parent: 2 })
+  host.post(4, 'Followed answer', { parent: 1 })
+  await page.goto('/')
+  await expect(card(page, 4)).toBeVisible()
+  await card(page, 1).getByRole('button', { name: '1 more reply', exact: true }).click()
+  await expect(card(page, 2)).toBeVisible()
+  await card(page, 2).getByRole('button', { name: '1 reply', exact: true }).click()
+  await expect(card(page, 3)).toBeVisible()
+  host.post(5, 'New followed conversation')
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  const refresh = page.getByRole('button', { name: /refresh.*new/ })
+  await expect(refresh).toBeVisible()
+  await expect(card(page, 3)).toBeVisible()
+  await refresh.click()
+  await expect(card(page, 5)).toBeVisible()
+  for (const id of [2, 3]) await expect(card(page, id)).toHaveCount(0)
+  // Opening again starts with direct replies, without restoring the old nested branch.
+  await card(page, 1).getByRole('button', { name: '1 more reply', exact: true }).click()
+  await expect(card(page, 2)).toBeVisible()
+  await expect(card(page, 3)).toHaveCount(0)
 })

@@ -18,7 +18,7 @@
       {#if event.kind === 'activation'}
         activated account keys{#if event.amount > 0}{' '}and bought {event.amount.toLocaleString()} of their own keys{/if}!
       {:else}
-        {event.kind === 'purchase' ? 'bought' : 'transferred'} {event.amount.toLocaleString()} of <Name address={event.creator} />'s keys{#if event.kind === 'transfer'} to <Name address={event.to} />{/if}!
+        {event.kind === 'purchase' ? 'bought' : 'transferred'} {event.amount.toLocaleString()} of <Name address={event.creator} />'s keys{#if event.kind === 'transfer'}{' '}to <Name address={event.to} />{/if}!
       {/if}
     </a>
     <p class="small dim"><time datetime={new Date(event.timestamp * 1000).toISOString()} title={fullTime(event.timestamp)}>{timeAgo(event.timestamp)}</time>

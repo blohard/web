@@ -13,7 +13,7 @@
   import { refreshCue } from '../../shared/refresh-cue.svelte'
   import { shortDate } from '../../lib/format'
   import { muted } from '../../lib/muted.svelte'
-  import { expansionOf, RowExpansion } from './stream-expansion'
+  import { expansionOf, resetExpansion, RowExpansion } from './stream-expansion'
   import { rememberStream, streamPosition } from '../navigation/stream-position'
   import { visitPlace } from '../navigation/visit-position'
   import { router } from '../navigation/router.svelte'
@@ -66,18 +66,17 @@
   })
   /**
    * Conversations opened in place under their cards, and the choices made inside
-   * them, remembered per stream for this tab. Only a press changes the set; a
-   * refresh reopens the same branches and never adds or folds one.
+   * them, remembered per stream until the reader explicitly refreshes it.
    */
-  let expansion = $derived(expansionOf(identity))
+  let expansionRevision = $state(0)
+  let expansion = $derived.by(() => { void expansionRevision; return expansionOf(identity) })
   /** One handle per row of this mount. Back mounts anew, so a reply revealed in a branch is not replayed. */
-  const handles = new Map<string, RowExpansion>()
+  const handles = $derived.by(() => { void expansion; return new Map<bigint, RowExpansion>() })
   function rowOf(row: bigint): RowExpansion {
-    const key = `${identity}/${row}`
-    let h = handles.get(key)
+    let h = handles.get(row)
     if (!h) {
       h = new RowExpansion(expansion, row)
-      handles.set(key, h)
+      handles.set(row, h)
     }
     return h
   }
@@ -85,7 +84,7 @@
   // Reloads when the refresh counter or the muted list changes. The first
   // load restores a visited stream's limit or starts at twenty. Later loads
   // keep every still-selected row. Explicit Refresh advances `refreshRevision`,
-  // recalculates automatic previews and returns to the top. Posting, deletion
+  // resets expansion choices, recalculates previews and returns to the top. Posting, deletion
   // and retries preserve previews and reload without moving the reader.
   let resuming = $state(false)
   let loaded: string | null = null
@@ -101,6 +100,7 @@
     untrack(() => {
       const firstLoad = loaded !== key
       const press = !firstLoad && currentRefresh !== seenRefresh
+      if (press) { resetExpansion(key); expansionRevision++ }
       loaded = key
       const saved = firstLoad ? streamPosition(key, positions) : undefined
       resuming = !!saved
@@ -185,7 +185,9 @@
         {#if entry.kind === 'key'}
           <FirstScreenRow id={entry.key}><KeyActivityRow event={entry.event} {chain} /></FirstScreenRow>
         {:else}
+          {#key rowOf(entry.row.key)}
           <ConversationRow resume={resuming} {gateRefreshReady} reloadKey={page} {chain} page={p} row={entry.row} {collapseMuted} rowx={rowOf(entry.row.key)} onchanged={() => inPlaceReloadRevision++} />
+          {/key}
         {/if}
       </div>
     {/each}

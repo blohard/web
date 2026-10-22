@@ -1,7 +1,7 @@
 // Which conversations a stream's reader opened in place, and the paging and
 // nesting choices made inside them. Kept per stream for the life of this tab,
 // like stream positions, so returning to a stream restores what was open.
-// Nothing here opens or closes a branch on its own.
+// Explicit Refresh resets these choices; polling and local changes keep them.
 //
 // Every card can open its own direct replies. A preview and its later copy in
 // a loaded list share the same choice, without opening intervening branches.
@@ -45,6 +45,11 @@ export function expansionOf(key: string): Expansion {
     expansions.set(key, e)
   }
   return e
+}
+
+/** Start fresh on explicit Refresh. Mounted lists finish against their old record. */
+export function resetExpansion(key: string): void {
+  expansions.delete(key)
 }
 
 /** The posts whose branches a stream has open, whichever rows they stand in; empty without creating a record. */

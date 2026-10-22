@@ -1,7 +1,7 @@
 <script lang="ts">
   // A conversation opened in place under a stream card: the thread page's own
-  // replies list, fed by that post's thread session. A new stream load, which
-  // is what a refresh is, hands it a fresh facade; the list keeps its rows,
+  // replies list, fed by that post's thread session. A local reload hands
+  // it a fresh facade; the list keeps its rows,
   // appends to a complete branch and leaves a partial one at its length.
   import { onDestroy, untrack, type Snippet } from 'svelte'
   import { readRoot } from './replies'
