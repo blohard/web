@@ -18,6 +18,7 @@
     "load-test": "node scripts/load-test.mjs",
     "measure:reads": "node scripts/read-costs.mjs",
     "test:ui": "playwright test",
+    "test:layout": "BLOHARD_UI_BUILD=production playwright test",
     "test:integration": "node scripts/integration/client.mjs && node scripts/integration/account-keys.mjs && node scripts/integration/bot.mjs"
   },
   "devDependencies": {

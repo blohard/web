@@ -103,14 +103,14 @@
       const press = !firstLoad && currentRefresh !== seenRefresh
       const fold = !!home && !home.folded
       if (home) home.folded = true
-      if (press || fold) { resetExpansion(key); expansionRevision++ }
+      if ((press || fold) && resetExpansion(key)) expansionRevision++
       loaded = key
       const saved = firstLoad ? streamPosition(key, positions) : undefined
       resuming = !!saved
       entrance?.finish()
       walk?.screen.finish()
       walk = null
-      if (firstLoad) entrance = saved ? null : new FirstScreen()
+      if (firstLoad) entrance = new FirstScreen()
       const screen = entrance
       const posts = (saved || fold) && !press
         ? resumeFeed(currentChain, currentFilter, saved?.limit, !fold)

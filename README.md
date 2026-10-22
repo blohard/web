@@ -131,7 +131,8 @@ npm ci
 npm run check      # types
 npm test           # Node tests
 npm run build      # the app and the rendered protocol spec, into dist/
-npm run test:ui    # browser layout and interactions in Chromium; separate pre-release check
+npm run test:ui    # browser layout and interactions in Chromium
+npm run test:layout # desktop/phone transitions against a production build
 ```
 
 The contracts the app talks to are pinned as submodules under `lib/`, so clone
@@ -184,3 +185,26 @@ It starts its own Vite server on port 8790; a port already in use fails the run.
 A failed test saves its trace under `test-results/` for `npx playwright show-trace`.
 Browser tests assert rendered behavior rather than replacing component source
 or matching template text.
+
+
+### Preventing layout regressions
+
+Changes to component keys, reply resets, loading visibility or scroll restoration
+need a transition test, not just an assertion about the final screen. Preserve
+unaffected mounted cards when clearing UI choices. Newly mounted streams use
+`FirstScreen` to coordinate their initial display, including cached returns;
+keep scroll restoration owned by the navigation helpers.
+
+`tests/ui/layout.spec.mjs` runs at desktop and phone widths. It delays real HTTP
+answers for bodies and reply checks, then uses `layout-watch.mjs` to sample card
+positions, heights and visibility on animation frames. Choose a stable anchor
+when an action intentionally moves the whole conversation; do not excuse later
+movement or disappearance of an already displayed card. Also assert DOM identity
+when an action should leave a card mounted. Screenshot comparisons alone miss
+these temporary states.
+
+The ordinary browser suite runs these scenarios on the development server.
+`npm run test:layout` builds the app into ignored `dist-layout/` and runs the same
+scenarios through Vite preview. It needs no source-module imports, test code in
+the app bundle, live services or extra dependencies. Both browser commands are
+required CI steps. Failed CI runs retain Playwright traces for seven days.

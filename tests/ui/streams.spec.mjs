@@ -1097,3 +1097,51 @@ for (const away of [false, true]) test(`Home resets reply choices ${away ? 'when
   await page.getByRole('button', { name: '[ following ]', exact: true }).click()
   await expect(card(page, 2)).toBeVisible()
 })
+
+
+test('repeated Home presses keep unchanged cards mounted and their layout steady', async ({ page, host }) => {
+  host.post(1, 'Followed conversation')
+  host.post(2, 'Followed reply with enough words to occupy its normal body height.', { parent: 1 })
+  await page.goto('/')
+  await expect(card(page, 2)).toContainText('Followed reply with enough words')
+  const reply = await card(page, 2).elementHandle()
+  const height = (await card(page, 2).boundingBox()).height
+  for (let i = 0; i < 3; i++) {
+    await page.locator('nav.side').getByRole('link', { name: /^(?:> )?home$/ }).click()
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    expect(await reply.evaluate(node => node.isConnected)).toBe(true)
+    expect((await card(page, 2).boundingBox()).height).toBe(height)
+  }
+})
+
+test('returning to a stream waits for reply checks before revealing its cards', async ({ page, host }) => {
+  host.post(1, 'Followed conversation')
+  host.post(2, 'Followed reply whose display must settle before the stream appears.', { parent: 1 })
+  await page.clock.install()
+  await page.goto('/')
+  await expect(card(page, 2)).toContainText('Followed reply whose display')
+  await page.getByRole('button', { name: '[ everyone ]', exact: true }).click()
+  await expect(card(page, 1)).toBeVisible()
+  await page.evaluate(async () => {
+    const { gating } = await import('/src/features/messages/gating.svelte.ts')
+    const check = gating.check.bind(gating)
+    const hold = new Promise(resolve => { window.releaseReplyCheck = resolve })
+    gating.check = async (...args) => {
+      window.replyCheckStarted = true
+      await hold
+      return check(...args)
+    }
+  })
+  try {
+    await page.getByRole('button', { name: '[ following ]', exact: true }).click()
+    await expect.poll(() => page.evaluate(() => window.replyCheckStarted)).toBe(true)
+    await page.clock.runFor(350)
+    await expect(card(page, 1)).not.toBeVisible()
+    await expect(card(page, 2)).not.toBeVisible()
+  } finally {
+    await page.evaluate(() => window.releaseReplyCheck())
+  }
+  await expect(card(page, 1)).toBeVisible()
+  await expect(card(page, 2)).toContainText('Followed reply whose display')
+  await expect(card(page, 2)).toBeVisible()
+})

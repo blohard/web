@@ -47,9 +47,12 @@ export function expansionOf(key: string): Expansion {
   return e
 }
 
-/** Start fresh on explicit Refresh or Home. Mounted lists finish against their old record. */
-export function resetExpansion(key: string): void {
-  expansions.delete(key)
+/** Reset saved choices only when present. Unchanged rows keep their mounted cards. */
+export function resetExpansion(key: string): boolean {
+  const e = expansions.get(key)
+  if (!e || (!e.modes.size && !e.views.size && ![...e.previews.values()].some(previews => previews.size))) return false
+  // Mounted lists finish against their old record.
+  return expansions.delete(key)
 }
 
 /** The posts whose branches a stream has open, whichever rows they stand in; empty without creating a record. */

@@ -23,7 +23,16 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:ui -- --forbid-only
+      - name: Browser tests
+        run: npm run test:ui -- --forbid-only
+      - name: Production layout tests
+        run: npm run test:layout -- --forbid-only
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-traces
+          path: test-results/
+          retention-days: 7
 
   # The tracked ABIs must match the contracts pinned under lib/. Foundry is
   # pinned to the version the contract repositories build with.

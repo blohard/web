@@ -27,3 +27,6 @@ load-results/
 # Browser test artifacts
 test-results/
 playwright-report/
+
+# Isolated production build for layout tests
+dist-layout/

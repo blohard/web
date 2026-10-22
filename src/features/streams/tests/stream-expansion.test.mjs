@@ -288,3 +288,17 @@ test('explicit refresh resets only its stream, including nested choices and reta
   assert.equal(fresh.isMounted(1n), true, 'old lists cannot unregister the refreshed stream')
   unmountFresh()
 })
+
+
+test('resetting a stream without reply choices preserves its expansion record', () => {
+  const key = 'rows/unchanged'
+  assert.equal(resetExpansion(key), false)
+  const expansion = expansionOf(key)
+  const row = new RowExpansion(expansion, 1n)
+  assert.equal(resetExpansion(key), false, 'a mounted row with no choices needs no reset')
+  assert.equal(expansionOf(key), expansion)
+  row.press(1n)
+  assert.equal(resetExpansion(key), true)
+  assert.notEqual(expansionOf(key), expansion)
+  assert.equal(resetExpansion(key), false, 'repeated Home presses leave the fresh record alone')
+})
