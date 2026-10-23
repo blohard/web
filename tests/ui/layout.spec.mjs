@@ -1,8 +1,37 @@
-import { test, expect, stranger, card, deferred } from './host.mjs'
+import { test, expect, author, stranger, card, deferred } from './host.mjs'
 import { frames, watchLayout, expectStable } from './layout-watch.mjs'
 
 for (const width of [1100, 390]) test.describe(`layout at ${width}px`, () => {
   test.use({ viewport: { width, height: 900 } })
+
+  test('notification reply context wraps long URLs inside its column', async ({ page, host }) => {
+    const url = `https://basescan.org/tx/0x${'a'.repeat(64)}`
+    host.post(1, `Another token burn: ${url}`)
+    host.post(2, 'The receipt is the whole point.', { who: stranger, parent: 1 })
+    await page.addInitScript(who => {
+      window.ethereum = { on() {}, removeListener() {}, async request({ method }) {
+        if (method === 'eth_accounts') return [who]
+        if (method === 'eth_chainId') return '0x14a34'
+        throw Object.assign(new Error(`unsupported wallet method ${method}`), { code: 4200 })
+      } }
+    }, author)
+    await page.goto('/#/notifications')
+    const context = card(page, 2).locator('a.context')
+    await expect(context).toContainText(url)
+    await expect(context).toBeVisible()
+    const geometry = await context.evaluate(node => {
+      const range = document.createRange()
+      range.selectNodeContents(node.querySelector('.line'))
+      const bounds = node.getBoundingClientRect()
+      return { left: bounds.left, right: bounds.right,
+        lines: [...range.getClientRects()].map(r => ({ left: r.left, right: r.right, top: r.top })) }
+    })
+    expect(new Set(geometry.lines.map(r => r.top)).size).toBeGreaterThan(1)
+    for (const line of geometry.lines) {
+      expect(line.left).toBeGreaterThanOrEqual(geometry.left - 1)
+      expect(line.right).toBeLessThanOrEqual(geometry.right + 1)
+    }
+  })
 
   test('repeated Home keeps default cards mounted and steady', async ({ page, host }) => {
     host.post(1, 'Conversation with a reply')

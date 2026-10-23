@@ -19,7 +19,7 @@ article.msg.collapsed .avatar-gap { display: block; width: 36px; height: 1px; }
 
 /* "in reply to" context above a reply */
 a.context { display: block; color: var(--fg); font-size: 0.86em; margin: 0 0 0.5rem 3rem; padding: 0.25rem 0.6rem;
-  border-left: 2px solid var(--border); text-decoration: none; }
+  border-left: 2px solid var(--border); text-decoration: none; overflow-wrap: anywhere; }
 a.context:hover { border-left-color: var(--accent); text-decoration: none; }
 a.context .who { font-weight: 600; }
 a.context .line { color: var(--dim); }
