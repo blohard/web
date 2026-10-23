@@ -22,17 +22,56 @@ test('version one stores exact plain text, including literal HTML and formatting
   assert.deepEqual(interpret({ ok: true, bytes }), { kind: 'text', text })
 })
 
-test('single asterisks and underscores format flat spans; unsupported punctuation stays literal', () => {
-  const text = 'hello *bold* and _italic_\n*outer _literal_ text*\n**double** ***triple*** word_inside_word'
+test('single asterisks and underscores format spans; unsupported punctuation stays literal', () => {
+  const text = 'hello *bold* and _italic_\n**double** ***triple*** word_inside_word'
   const segments = parse(text)
   assert.deepEqual(segments.filter(s => s.style).map(s => [s.text, s.style]), [
-    ['bold', 'bold'], ['italic', 'italic'], ['outer _literal_ text', 'bold'],
+    ['bold', 'bold'], ['italic', 'italic'],
   ])
-  assert.equal(shown(segments), 'hello bold and italic\nouter _literal_ text\n**double** ***triple*** word_inside_word')
+  assert.equal(shown(segments), 'hello bold and italic\n**double** ***triple*** word_inside_word')
   for (const literal of ['*unclosed', '_unclosed', '*line\nbreak*', '\\*escaped*', 'a*b*c', 'hello_there_', '* space*', '*space *', 'foo * bar * baz', '# heading\n> quote\n- list\n`code`']) {
     assert.equal(shown(parse(literal)), literal)
     assert.equal(parse(literal).some(s => s.style), false, literal)
   }
+})
+
+test('bold and italics combine in either order and keep surrounding styles', async () => {
+  for (const text of ['*_foo_*', '_*foo*_']) {
+    assert.deepEqual(parse(text), [{ kind: 'text', text: 'foo', style: 'bold-italic' }])
+    assert.match((await html(text)).replace(/<!--.*?-->/gs, ''), /class="[^"]*\bbold\b[^"\n]*\bitalic\b[^"\n]*"[^>]*>foo<\/span>/)
+  }
+  assert.deepEqual(parse('*bold _both_ bold* and _italic *both* italic_').map(s => [s.text, s.style]), [
+    ['bold ', 'bold'], ['both', 'bold-italic'], [' bold', 'bold'], [' and ', undefined],
+    ['italic ', 'italic'], ['both', 'bold-italic'], [' italic', 'italic'],
+  ])
+  assert.deepEqual(parse('*bold _unfinished*').map(s => [s.text, s.style]), [['*bold _unfinished*', undefined]])
+  for (const [text, expected] of [
+    ['*_line\nbreak_*', '*_line\nbreak_*'], ['_*line\rbreak*_', '_*line\rbreak*_'],
+    ['**_foo_**', '**foo**'], ['*_foo_*tail', '*foo*tail'], ['*_foo* bar_', '*foo* bar'],
+  ]) {
+    assert.equal(shown(parse(text)), expected)
+    assert.equal(parse(text).some(s => s.style === 'bold-italic'), false, text)
+  }
+  assert.deepEqual(parse('*bold \\_literal\\_ bold*'), [{ kind: 'text', text: 'bold \\_literal\\_ bold', style: 'bold' }])
+})
+
+test('combined styles preserve link destinations and wrapped references', () => {
+  for (const text of ['*_https://example.com/a_b_*', '_*https://example.com/a_b*_', '*outer _https://example.com/a_b_*']) {
+    assert.deepEqual(ofKind(parse(text), 'link'), [{ kind: 'link', text: 'https://example.com/a_b', href: 'https://example.com/a_b', style: 'bold-italic' }])
+  }
+  assert.equal(ofKind(parse(`*_[alice](account://${address})_*`), 'mention')[0].style, 'bold-italic')
+  for (const text of ['https://example.com/a_*', 'word*https://example.com/a*', '\\*https://example.com/a*']) {
+    assert.equal(ofKind(parse(text), 'link')[0].style, undefined)
+    assert.equal(shown(parse(text)), text)
+  }
+})
+
+test('combined styles share the existing pair budget and leave the rest literal', () => {
+  const input = Array(1000).fill('*_both_*').join(' ')
+  const segments = parse(input)
+  assert.equal(segments.filter(s => s.style === 'bold-italic').length, 32)
+  assert.ok(shown(segments).endsWith('*_both_*'))
+  assert.ok(segments.length <= 129)
 })
 
 test('URLs and domains retain visible destinations, punctuation and safe schemes', () => {

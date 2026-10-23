@@ -1,4 +1,4 @@
-// Plain body text with bounded app references, web links and flat Slack-style
+// Plain body text with bounded app references, web links and Slack-style
 // emphasis. Nothing here produces HTML; MessageBody renders every value through Svelte.
 import { find } from 'linkifyjs'
 import type { Address, Hex } from 'viem'
@@ -12,7 +12,8 @@ const PREVIEW_LIMIT = 4
 export const previewLimit = (cap: number) => Number.isSafeInteger(cap) && cap >= 0 ? Math.min(cap, PREVIEW_LIMIT) : PREVIEW_LIMIT
 const REFERENCE = /(?:post|account):\/\/[^\s<>"'`()\[\]{}\\]*|record:0x[0-9a-fA-F]{64}(?![0-9a-fA-F])/g
 
-type Style = 'bold' | 'italic'
+type Emphasis = 'bold' | 'italic'
+type Style = Emphasis | 'bold-italic'
 type Value =
   | { kind: 'text'; text: string }
   | { kind: 'link'; text: string; href: string }
@@ -85,16 +86,9 @@ export function messageText(text: string, { quotes, maxAttachments = 4 }: { quot
       if (links === LINK_LIMIT || atoms.length === ATOM_LIMIT) break
       if (atoms.some(a => link.start < a.end && link.end > a.start)) continue
       try {
-        // A closing emphasis marker after a URL path belongs to its opener.
-        // Markers in an unwrapped URL remain part of that URL.
-        const marker = source[link.start - 1]
-        const before = source[link.start - 2]
-        const trim = (marker === '*' || marker === '_') && before !== marker && before !== '\\' && !word(before) && !word(source[link.end]) && link.value.endsWith(marker)
-        const finish = link.end - Number(trim)
-        const value = source.slice(link.start, finish)
-        const url = new URL(trim ? link.href.slice(0, -1) : link.href)
+        const url = new URL(link.href)
         if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) continue
-        atoms.push({ start: link.start, end: finish, value: { kind: 'link', text: value, href: url.href } })
+        atoms.push({ start: link.start, end: link.end, value: { kind: 'link', text: link.value, href: url.href } })
         links++
       } catch { /* A malformed destination is ordinary text. */ }
     }
@@ -121,22 +115,47 @@ function unframed(segments: TextSegment[]): TextSegment[] {
   return out
 }
 
-/** Single * and _ pairs on one line, without nesting or interpretation inside link destinations. */
+/** A single, unescaped marker; doubled markers remain literal. */
+function markerAt(text: string, at: number): '*' | '_' | null {
+  const c = text[at], before = text[at - 1]
+  return (c === '*' || c === '_') && before !== '\\' && before !== c && text[at + 1] !== c ? c : null
+}
+
+/** Single-line pairs, with at most one open pair of each style. Link destinations stay opaque. */
 function styled(text: string, end: number, atoms: Atom[]): TextSegment[] {
-  const ranges: { start: number; end: number; style: Style }[] = []
-  let open: { at: number; marker: string } | null = null
+  const ranges: { start: number; end: number; style: Emphasis }[] = []
+  const open: { at: number; marker: '*' | '_' }[] = []
   let atom = 0
   for (let i = 0; i < end && ranges.length < STYLE_LIMIT; i++) {
-    if (atoms[atom]?.start === i) { i = atoms[atom++].end - 1; continue }
-    const c = text[i], before = text[i - 1] ?? '', after = text[i + 1] ?? ''
-    if (c === '\n' || c === '\r') { open = null; continue }
-    if ((c !== '*' && c !== '_') || before === '\\' || before === c || after === c) continue
-    if (open) {
-      if (c === open.marker && before.trim() && !word(after)) {
-        ranges.push({ start: open.at, end: i, style: c === '*' ? 'bold' : 'italic' })
-        open = null
+    if (atoms[atom]?.start === i) {
+      const a = atoms[atom++]
+      if (a.value.kind === 'link') {
+        // Link recognition includes trailing * and _ in URL paths. Peel off only
+        // closers for the actual open styles, in nesting order, before skipping it.
+        for (let count = open.length; count > 0; count--) {
+          const suffix = open.slice(-count).reverse().map(o => o.marker).join('')
+          const start = a.end - count
+          if (!a.value.text.endsWith(suffix) || start <= a.start) continue
+          if (![...suffix].every((c, j) => markerAt(text, start + j) === c && text[start + j - 1].trim() && !word(text[start + j + 1]))) continue
+          a.end = start
+          a.value = { ...a.value, text: a.value.text.slice(0, -count), href: a.value.href.slice(0, -count) }
+          break
+        }
       }
-    } else if (!word(before) && after.trim()) open = { at: i, marker: c }
+      i = a.end - 1
+      continue
+    }
+    if (text[i] === '\n' || text[i] === '\r') { open.length = 0; continue }
+    const c = markerAt(text, i)
+    if (!c) continue
+    const before = text[i - 1] ?? '', after = text[i + 1] ?? ''
+    const last = open.at(-1)
+    if (last?.marker === c) {
+      if (before.trim() && !word(after)) {
+        ranges.push({ start: last.at, end: i, style: c === '*' ? 'bold' : 'italic' })
+        open.pop()
+      }
+    } else if (!open.some(o => o.marker === c) && !word(before) && after.trim()) open.push({ at: i, marker: c })
   }
   const out: TextSegment[] = []
   atom = 0
@@ -150,11 +169,17 @@ function styled(text: string, end: number, atoms: Atom[]): TextSegment[] {
     }
     if (at < finish) out.push({ kind: 'text', text: text.slice(at, finish), style })
   }
+  const markers = ranges.flatMap(r => [
+    { at: r.start, style: r.style, opening: true }, { at: r.end, style: r.style, opening: false },
+  ]).sort((a, b) => a.at - b.at)
+  const active = new Set<Emphasis>()
   let at = 0
-  for (const range of ranges) {
-    emit(at, range.start)
-    emit(range.start + 1, range.end, range.style)
-    at = range.end + 1
+  for (const marker of markers) {
+    const style: Style | undefined = active.size === 2 ? 'bold-italic' : active.values().next().value
+    emit(at, marker.at, style)
+    if (marker.opening) active.add(marker.style)
+    else active.delete(marker.style)
+    at = marker.at + 1
   }
   emit(at, text.length)
   return out

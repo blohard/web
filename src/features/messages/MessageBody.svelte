@@ -59,7 +59,7 @@
       {:else if seg.kind === 'record'}
         <div class="rec placeholder" class:rec-image={seg.image} data-record={seg.hash} data-alt={seg.label}></div>
       {:else}
-        <span class="run" class:bold={seg.style === 'bold'} class:italic={seg.style === 'italic'}>
+        <span class="run" class:bold={seg.style === 'bold' || seg.style === 'bold-italic'} class:italic={seg.style === 'italic' || seg.style === 'bold-italic'}>
           {#if seg.kind === 'text'}{seg.text}
           {:else if seg.kind === 'link'}<a href={seg.href} target="_blank" rel="noopener noreferrer">{seg.text}</a>
           {:else if seg.kind === 'mention'}<a class="mention" href={href.user(chainId, seg.address)} target={router.embed ? '_blank' : undefined} rel={router.embed ? 'noopener noreferrer' : undefined}>@{names.display(seg.address)}</a>

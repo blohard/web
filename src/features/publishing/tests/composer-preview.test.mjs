@@ -14,12 +14,13 @@ after(teardown)
 test('composer preview renders the actual grammar, local images and reply context without sending anything', async () => {
   const bytes = encode('image/png', new Uint8Array([1,2,3]))
   const record = { hash: hashOf(bytes), bytes, name: 'picture', kind: 'attachment', status: 'pending', mediaType: 'image/png' }
-  const text = '*bold* _italic_ <script>literal</script> https://example.org/\n![picture](record:' + record.hash + ')'
+  const text = '*bold* _italic_ *_both_* <script>literal</script> https://example.org/\n![picture](record:' + record.hash + ')'
   const html = await renderComponent('features/publishing/ComposerPreview.svelte', { chain: mock.chain, author, text, records: [record], parentId: 7n, onclose() {} })
   assert.match(html, /<dialog/)
   assert.match(html, /reply preview/)
   assert.match(html, /in reply to #7/)
   assert.match(html, /class="[^\"]*bold/)
+  assert.match(html.replace(/<!--.*?-->/gs, ''), /class="[^"]*\bbold\b[^"]*\bitalic\b[^"]*"[^>]*>both<\/span>/)
   assert.match(html, /&lt;script>literal&lt;\/script>/)
   assert.match(html, /href="https:\/\/example.org\//)
   assert.match(html, /<img alt="picture"/)

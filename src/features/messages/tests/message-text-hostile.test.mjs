@@ -14,7 +14,7 @@ function auditSegments(segments) {
   assert.ok(segments.length <= 385, `too many elements: ${segments.length}`)
   for (const s of segments) {
     assert.ok(['text', 'link', 'mention', 'post', 'quote', 'record'].includes(s.kind))
-    assert.ok(s.style === undefined || s.style === 'bold' || s.style === 'italic')
+    assert.ok(s.style === undefined || s.style === 'bold' || s.style === 'italic' || s.style === 'bold-italic')
     assert.equal('html' in s, false)
     if (s.kind === 'link') {
       const u = new URL(s.href)
@@ -83,6 +83,8 @@ const PAYLOADS = [
   '![x" onerror="alert(1)](record:0x' + 'ab'.repeat(32) + ')',
   '[<b onmouseover=alert(1)>bold</b>](https://example.com)',
   '**<script>alert(1)</script>**',
+  '*_<script>alert(1)</script>_*',
+  '_*<img src=x onerror=alert(1)>*_',
   '`<script>alert(1)</script>`',
   '```html\n<script>alert(1)</script>\n```',
   '    <script>alert(1)</script>',
@@ -141,6 +143,8 @@ test('seeded hostile fragments never create extra element kinds or unsafe destin
 test('deep nesting, table padding and long link openers cannot expand into recursive markup', async () => {
   const table = '|a'.repeat(1000) + '|\n' + '|-'.repeat(1000) + '|\n' + '|x|\n'.repeat(1000)
   const corpus = [
+    '*_'.repeat(20_000) + 'text' + '_*'.repeat(20_000),
+    '*_both_* '.repeat(20_000),
     '<'.repeat(20_000), '['.repeat(1024 * 1024),
     '> '.repeat(5_000) + 'deep', '- '.repeat(2_400) + '<script>text</script>',
     '*a **b '.repeat(2_000) + 'end' + ' b** a*'.repeat(2_000),
