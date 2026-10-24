@@ -1,7 +1,7 @@
 // The real app talks only to this fixture. Reuse the reader tests' API answers,
 // with actual envelope bytes and commitments so cards validate them normally.
 import { expect, test as base } from '@playwright/test'
-import { encodeAbiParameters, keccak256, zeroAddress } from 'viem'
+import { encodeAbiParameters, keccak256, stringToBytes, zeroAddress } from 'viem'
 import { answerIndex } from '../../scripts/index-fixture.mjs'
 import { address, hash, response } from '../../scripts/fixture-values.mjs'
 export { deferred } from '../../scripts/fixture-values.mjs'
@@ -92,6 +92,14 @@ export const test = base.extend({
       return contentHash
     }
     await use({ post, record, answer, chain, at: state.at, takedowns: () => state.takedowns,
+      block(owner, member, present = true) {
+        chain.blocklist ??= { registry: address('66'), list: 'blocked' }
+        const list = { registry: chain.blocklist.registry, owner, list: keccak256(stringToBytes(chain.blocklist.list)) }
+        state.at.sequence = String(BigInt(state.at.sequence) + 1n)
+        state.events.push({ sequence: state.at.sequence, event: { kind: 'chain', event: {
+          kind: 'membership', list, member, present, position: { block: state.at.checkpoint.block, log: 1 },
+        } } })
+      },
       policy(curated, blocked = [], { bots = [], declared = [] } = {}) {
         chain.curated = true
         state.policy = { admin: author, admin_chain: chain.id, origin: 'http://127.0.0.1:8790', revision: String(Number(state.policy?.revision ?? 0) + 1), curated, blocked, bots, declared_bots: declared, declarations: String(Number(state.policy?.declarations ?? 0) + 1) }

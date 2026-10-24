@@ -1,6 +1,6 @@
 import type { Address } from 'viem'
 import { setAuthorGate } from '../../lib/board'
-import { notificationList } from './blocking'
+import { readerBlocklist } from './blocking'
 import { sameAddress } from '../../lib/format'
 import { gates } from '../../lib/gates.svelte'
 import { gateForChoice, type AuthorGateChoice } from '../publishing/reply-rules'
@@ -16,7 +16,7 @@ export async function readAuthorGate(chain: ChainInfo, owner: Address) {
 }
 
 export function hasBlockedAccounts(chain: ChainInfo, owner: Address): Promise<boolean> {
-  const list = notificationList(chain, owner)
+  const list = readerBlocklist(chain, owner)
   return list ? hasMembers(chain, { registry: list.registry, id: list.list, owner }) : Promise.resolve(false)
 }
 

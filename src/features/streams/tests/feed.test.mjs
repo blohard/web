@@ -880,3 +880,37 @@ test('profile replies share sibling context without duplicating subjects or read
   assert.equal(conversation.cards.find(card => card.post.id === 956n).drawn, 2)
   assert.deepEqual(ids(conversation.cards.map(card => card.post)), [951, 953, 954, 956, 958, 959, 962, 970, 974, 982])
 })
+
+for (const stream of ['everyone', 'curated', 'following', 'keyring']) test(`${stream} excludes indexed blocks without a local mute`, async () => {
+  const blocked = address('88'), other = address('99')
+  const { readerBlocklist } = await load('features/account/blocking.ts')
+  const { muted } = await load('lib/muted.svelte.ts')
+  assert.equal(muted.has(blocked), false)
+  feedHistory([feedPost(1), ...Array.from({ length: 30 }, (_, i) => feedPost(i + 2, 0, blocked))])
+  if (stream === 'curated') curate([author, blocked])
+  const filter = stream === 'everyone' || stream === 'curated'
+    ? { kind: 'timeline', viewer: author, curatedOnly: stream === 'curated' }
+    : { kind: 'following', viewer: author, authors: [author, blocked], includeRepliesToViewer: stream === 'following' }
+  const list = readerBlocklist(mock.chain, author)
+  mock.membershipEvents.push({ kind: 'membership', list, member: blocked, present: true, position: { block: '40', log: 0 } })
+  const leads = page => ids(page.rows.map(r => r.lead))
+  assert.deepEqual(leads(await loadFeed(mock.chain, filter)), [1])
+  assert.equal(mock.calls.filter(c => c.method === 'feed').length, 1, 'blocked posts do not use page slots')
+  assert.ok(leads(await loadFeed(mock.chain, { ...filter, viewer: other })).includes(31), 'another viewer has a different list')
+  assert.ok(leads(await loadFeed(mock.chain, { kind: 'author', address: blocked, viewer: author })).includes(31), 'a deliberately opened profile still reads its posts')
+})
+
+test('blocklist changes reset a retained home feed on refresh, including unblock', async () => {
+  const blocked = address('88')
+  const { readerBlocklist } = await load('features/account/blocking.ts')
+  const filter = { kind: 'timeline', viewer: author }
+  feedHistory([feedPost(1), feedPost(2, 0, blocked)])
+  const leads = page => ids(page.rows.map(r => r.lead))
+  assert.deepEqual(leads(await loadFeed(mock.chain, filter)), [2, 1])
+  const list = readerBlocklist(mock.chain, author)
+  mock.membershipEvents.push({ kind: 'membership', list, member: blocked, present: true, position: { block: '3', log: 0 } })
+  assert.equal(await peekFeed(mock.chain, filter), Infinity, 'quiet reads request refresh after membership changes')
+  assert.deepEqual(leads(await loadFeed(mock.chain, filter)), [1])
+  mock.membershipEvents.push({ kind: 'membership', list, member: blocked, present: false, position: { block: '4', log: 0 } })
+  assert.deepEqual(leads(await loadFeed(mock.chain, filter)), [2, 1])
+})

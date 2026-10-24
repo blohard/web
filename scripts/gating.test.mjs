@@ -325,10 +325,10 @@ test("a custom per-post gate still applies the author's blocklist", async () => 
 
 for (const gate of [zeroAddress, address('99')]) {
   test(`blocklist display and notification filters survive unverified gate ${gate}`, async () => {
-    const { notificationList } = await load('features/account/blocking.ts')
+    const { readerBlocklist } = await load('features/account/blocking.ts')
     mock.chain.blocking = null; mock.chain.key_gates = null; mock.authorGate = gate
     assert.equal(await verdict(), 'folded')
-    assert.deepEqual(notificationList(mock.chain, author), { registry: mock.chain.blocklist.registry, owner: author, list: keccak256(new TextEncoder().encode('blocklist')) })
+    assert.deepEqual(readerBlocklist(mock.chain, author), { registry: mock.chain.blocklist.registry, owner: author, list: keccak256(new TextEncoder().encode('blocklist')) })
     mock.blocked = false
     assert.equal(await verdict(), 'shown')
   })

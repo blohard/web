@@ -220,6 +220,9 @@ Neither policy would change the chain.
   Keyring feeds select only posts and replies by the accounts whose
   keys the reader holds, or by the reader's key holders. Other authors can appear as thread
   context. Replies excluded by these rules remain available in notifications and their threads.
+- Home feeds exclude authors on the reader's indexed blocklist on that chain before paging,
+  even without a local mute. A membership change reloads the feed on its next refresh.
+  Profiles deliberately opened and parent records needed as reply context remain available.
 - A client may keep a **muted list**: authors whose posts are left out of the reader's timelines and
   collapsed to one line inside threads, where the reader can still open them. A profile the reader
   opens on purpose still shows them. Like following, this is the reader's business and stays local

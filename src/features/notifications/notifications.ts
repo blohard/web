@@ -4,7 +4,7 @@
 // personal mutes are applied only in this tab.
 import type { Address, Hex } from 'viem'
 import * as api from '../../lib/api'
-import { notificationList } from '../account/blocking'
+import { readerBlocklist } from '../account/blocking'
 import { endingOf, newestFirst } from '../../lib/board'
 import { gates } from '../../lib/gates.svelte'
 import { sameAddress } from '../../lib/format'
@@ -78,7 +78,7 @@ function newestShown(chain: ChainInfo, me: Address, rows: api.WireNotification[]
 export async function newestNotification(chain: ChainInfo, me: Address): Promise<{ timestamp: number | null; at: api.At }> {
   let cursor: api.Cursor | null = null, head: api.At | undefined
   for (let n = 0; n < 8; n++) {
-    const page = await api.notifications(chain, me, cursor, 20, notificationList(chain, me))
+    const page = await api.notifications(chain, me, cursor, 20, readerBlocklist(chain, me))
     if (page.items.length > 20 || (head && page.at.generation !== head.generation)) throw new api.ApiError(409, 'reset_required')
     if (page.next && cursor && api.integer(page.next.before) >= api.integer(cursor.before)) throw new Error('host notification cursor made no progress')
     head ??= page.at
@@ -97,7 +97,7 @@ export function newestIn(chain: ChainInfo, me: Address, answer: api.Changes): nu
 }
 async function refresh(chain: ChainInfo, me: Address, v: View) {
   if (!v.at) return
-  for await (const { from, answer: page, next } of api.changePages(chain, v.at, { account: me, exclude_list: notificationList(chain, me), feed: { any: [{ parent_authors: [me], kind: 'replies' }], exclude_list: notificationList(chain, me) } })) {
+  for await (const { from, answer: page, next } of api.changePages(chain, v.at, { account: me, exclude_list: readerBlocklist(chain, me), feed: { any: [{ parent_authors: [me], kind: 'replies' }], exclude_list: readerBlocklist(chain, me) } })) {
     if (!gates.follow(chain, from, page)) await gates.advanceToHead(chain)
     remember(chain, me, v, page.at, page.references)
     for (const wire of page.records) {
@@ -110,7 +110,7 @@ async function refresh(chain: ChainInfo, me: Address, v: View) {
 }
 async function older(chain: ChainInfo, me: Address, v: View, limit: number) {
   for (let n = 0; n < 8 && !v.complete && visible(v, me).length < limit; n++) {
-    const page = await api.notifications(chain, me, v.cursor, 20, notificationList(chain, me))
+    const page = await api.notifications(chain, me, v.cursor, 20, readerBlocklist(chain, me))
     if (page.items.length > 20 || (v.at && page.at.generation !== v.at.generation)) throw new api.ApiError(409, 'reset_required')
     if (page.next && v.cursor && api.integer(page.next.before) >= api.integer(v.cursor.before)) throw new Error('host notification cursor made no progress')
     remember(chain, me, v, page.at, page.items)

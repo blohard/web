@@ -132,8 +132,8 @@ test('the same chain id with a different Board starts a new reference view', asy
 
 
 test('indexed blocks filter mentions and quotes before paging, with chain and reader isolation', async () => {
-  const { notificationList } = await load('features/account/blocking.ts')
-  const state = states.get(mock.chain.id), list = notificationList(mock.chain, me)
+  const { readerBlocklist } = await load('features/account/blocking.ts')
+  const state = states.get(mock.chain.id), list = readerBlocklist(mock.chain, me)
   const change = (present) => {
     const sequence = String(BigInt(state.at.sequence) + 1n)
     state.at = { ...state.at, sequence }
@@ -340,8 +340,8 @@ test('the indicator historical scan is bounded even when every row is muted', as
 
 test('indicator checks exclude blocked accounts at the host and retry failed reads', async () => {
   const dot = new NotificationDot(), s = states.get(mock.chain.id)
-  const { notificationList } = await load('features/account/blocking.ts')
-  const list = notificationList(mock.chain, me)
+  const { readerBlocklist } = await load('features/account/blocking.ts')
+  const list = readerBlocklist(mock.chain, me)
   associate(s, 7, me, loud)
   const sequence = String(BigInt(s.at.sequence) + 1n)
   s.at = { ...s.at, sequence }
@@ -511,12 +511,12 @@ test('a failed cue confirmation retries on the next shared poll even with no new
 
 test('a blocked cue is confirmed only once, not on every shared poll', async () => {
   const { QuietChanges, listening } = await load('features/streams/quiet-changes.ts')
-  const { notificationList } = await load('features/account/blocking.ts')
+  const { readerBlocklist } = await load('features/account/blocking.ts')
   const dot = new NotificationDot(), s = states.get(mock.chain.id)
   await dot.check([mock.chain], me, undefined)
   const base = s.at, quiet = new QuietChanges(), listener = dot.listen(mock.chain, me)
   associate(s, 5, me, loud)
-  const list = notificationList(mock.chain, me), sequence = String(BigInt(s.at.sequence) + 1n)
+  const list = readerBlocklist(mock.chain, me), sequence = String(BigInt(s.at.sequence) + 1n)
   s.at = { ...s.at, sequence }
   s.events.push({ sequence, event: { kind: 'chain', event: { kind: 'membership', list, member: loud, present: true, position: { block: '1000', log: 0 } } } })
   for (let i = 0; i < 3; i++) {

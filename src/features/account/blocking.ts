@@ -20,16 +20,16 @@ export function blockSetup(chain: ChainInfo): BlockSetup | null {
   return { gate: b.gate, registry: b.registry, list: b.list, id: keccak256(stringToBytes(b.list)) }
 }
 
-/** Notification queries exclude this list on the source chain, regardless of
+/** Feed and notification queries exclude this list on the source chain, regardless of
  * whether the reader currently uses the suggested reply gate. */
-export function notificationList(chain: ChainInfo, owner: Address): List | undefined {
+export function readerBlocklist(chain: Pick<ChainInfo, 'blocklist'>, owner: Address): List | undefined {
   const setup = chain.blocklist
   return setup ? { registry: setup.registry, list: keccak256(stringToBytes(setup.list)), owner } : undefined
 }
 
 /** Is `address` on the reader's block list? */
 export async function isBlocked(chain: ChainInfo, me: Address, address: Address): Promise<boolean> {
-  const list = notificationList(chain, me)
+  const list = readerBlocklist(chain, me)
   if (!list) return false
   return contains(chain, { registry: list.registry, id: list.list, owner: me }, address)
 }
