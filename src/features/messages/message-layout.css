@@ -26,10 +26,11 @@ a.context .line { color: var(--dim); }
 /* A conversation label owns the separator; its card has separator={false}. */
 .conversation-context { display: block; position: relative; margin: 0; padding: .4rem 1rem .4rem calc(1rem + 40px + .75rem);
   color: var(--fg); text-decoration: none; border-top: 1px dashed var(--border); font-size: .86em; }
-.conversation-context::before { content: ''; position: absolute; left: calc(1rem + 19px); top: .4rem; bottom: 0;
-  border-left: 2px dashed var(--dim); }
+/* End the connector beside the label's first line, rather than pointing above it. */
+.conversation-context::before { content: ''; position: absolute; left: calc(1rem + 19px); top: calc(.4rem + .5lh - 1px); bottom: 0;
+  width: calc(21px + .75rem - .5em); border-left: 2px dashed var(--dim); border-top: 2px dashed var(--dim); }
 .conversation-context:hover { text-decoration: none; }
-.conversation-context:hover::before { border-left-color: var(--accent); }
+.conversation-context:hover::before { border-color: var(--accent); }
 
 .row-placeholder { padding: 0.8rem 1rem 0; border-top: 1px dashed var(--border); }
 

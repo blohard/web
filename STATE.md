@@ -257,8 +257,10 @@ body, parent excerpt and first reply verdict must settle, with failures counting
 collapsed cards needing no body. After the DOM update, the stream reveals once a
 consecutive settled prefix reaches half a viewport beyond the screen, all rows
 settle, or two seconds pass from the feed page arriving. The reveal observes existing
-reads; it owns no content, verdict cache or extra requests. Images and names do not
-hold it up, and existing thumbnail consent and folding rules still apply.
+reads; it owns no content, verdict cache or extra requests. Automatically opened
+record pictures also wait for decoding or failure within that same budget, so their
+natural proportions and clipping controls settle before reveal. Names and link
+thumbnails do not hold it up; existing consent and folding rules still apply.
 
 Back and tab returns use the same bounded wait while restoring their saved
 position, so reply checks finish before the stream appears. Refresh retains
@@ -268,8 +270,8 @@ wrappers; their child cards retain measurable dimensions. The same first-screen
 check adds those heights in reading order, then reveals the new rows together,
 with the same two-second budget. A retired load cannot delay its replacement.
 The timeout uses no animation frame or resize observer; background browser
-throttling can still delay timers. Slow content may arrive after the bounded
-wait, and image, name, quote and clipping layout changes are not covered by it.
+throttling can still delay timers. Slow reads or image decoding can finish after
+the bounded wait; later name, quote and clipping updates can still change layout.
 
 ## Account-key reads
 

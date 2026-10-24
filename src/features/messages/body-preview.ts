@@ -66,10 +66,15 @@ export function bodyPreview(node: HTMLElement, onOverflow: (clipped: boolean) =>
   // Our inert attributes are deliberately not observed, avoiding a feedback loop.
   const mutation = new MutationObserver(schedule)
   mutation.observe(content, { childList: true, subtree: true, characterData: true })
+  // An image's dimensions must update the clipping control before its load
+  // handler marks the card ready for the stream's initial reveal.
+  const loaded = () => { cancelAnimationFrame(frame); measure() }
+  content.addEventListener('load', loaded, { capture: true })
   schedule()
   return {
     destroy() {
       cancelAnimationFrame(frame)
+      content.removeEventListener('load', loaded, { capture: true })
       resize.disconnect()
       mutation.disconnect()
       for (const element of hidden) release(element, owner)

@@ -1,7 +1,7 @@
 <script lang="ts">
   // Display an already-fetched body. Cards own fetching and moderation; this
   // component owns escaped text, bounded links/references, attachment hydration and notices.
-  import type { Snippet } from 'svelte'
+  import { untrack, type Snippet } from 'svelte'
   import type { Address } from 'viem'
   import { notice, type Body } from '../../lib/body'
   import { host } from '../../lib/host.svelte'
@@ -9,6 +9,7 @@
   import { names } from '../../lib/names.svelte'
   import { href, router } from '../navigation/router.svelte'
   import { hydrateRecords } from './record-images'
+  import { firstDisplay } from '../../shared/first-screen.svelte'
   import type { Quote } from '../../lib/reference-syntax'
   import BodyPreview from './BodyPreview.svelte'
 
@@ -27,6 +28,15 @@
     /** Drafts may show their local picture bytes before publication. */
     record?: Snippet<[Extract<TextSegment, { kind: 'record' }>]>
   } = $props()
+
+  let pendingPictures = $state(0)
+  firstDisplay(() => pendingPictures === 0)
+  function pictures(root: HTMLElement) {
+    return hydrateRecords(root, () => {
+      untrack(() => pendingPictures++)
+      return () => { untrack(() => pendingPictures--) }
+    })
+  }
 
   const text = $derived(body.kind === 'text' ? body.text : '')
   const quotes = $derived(quote !== undefined)
@@ -50,7 +60,7 @@
 </script>
 
 {#snippet part(items: TextSegment[])}
-  <div class="message-text" data-chain={chainId} data-message={id} data-author={author} {@attach hydrateRecords}>
+  <div class="message-text" data-chain={chainId} data-message={id} data-author={author} {@attach pictures}>
     {#each items as seg (seg)}
       {#if seg.kind === 'quote' && quote}
         {@render quote(seg)}

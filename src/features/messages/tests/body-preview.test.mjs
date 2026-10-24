@@ -30,7 +30,7 @@ function layout(t) {
     inert, rects: [{ top, bottom }], getClientRects() { return this.rects },
   })
   const box = (height, limit, controls = []) => {
-    const content = { height, controls, getBoundingClientRect() { return { height: this.height } }, querySelectorAll() { return this.controls } }
+    const content = Object.assign(new EventTarget(), { height, controls, getBoundingClientRect() { return { height: this.height } }, querySelectorAll() { return this.controls } })
     const node = { limit, firstElementChild: content,
       getBoundingClientRect() { return { top: 0, bottom: Math.min(content.height, this.limit), height: Math.min(content.height, this.limit) } },
     }
@@ -117,4 +117,17 @@ test('cleanup restores only its own inert state and cancels pending measurements
   assert.equal(originallyInert.inert, true)
   assert.equal(b.frames.size, 0)
   assert.equal(b.observers.size, 0)
+})
+
+test('an image load measures clipping before the next animation frame', (t) => {
+  const b = layout(t), { node, content } = b.box(80, 200), answers = []
+  const action = bodyPreview(node, clipped => answers.push(clipped))
+  b.flush()
+  content.height = 400
+  content.dispatchEvent(new Event('load'))
+  assert.deepEqual(answers, [false, true])
+  action.destroy()
+  content.height = 80
+  content.dispatchEvent(new Event('load'))
+  assert.deepEqual(answers, [false, true], 'destroy removes the load listener')
 })

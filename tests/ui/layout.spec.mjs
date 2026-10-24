@@ -4,6 +4,70 @@ import { frames, watchLayout, expectStable } from './layout-watch.mjs'
 for (const width of [1100, 390]) test.describe(`layout at ${width}px`, () => {
   test.use({ viewport: { width, height: 900 } })
 
+  test('a context label ends its connector at the text while visible parents stay joined', async ({ page, host }) => {
+    host.post(1, 'An earlier post', { who: stranger })
+    host.post(2, 'The visible parent', { who: stranger, parent: 1 })
+    host.post(3, 'The followed reply', { parent: 2 })
+    await page.goto('/')
+    const label = page.locator('.conversation-context').filter({ hasText: 'in reply to #1' })
+    await expect(label).toBeVisible()
+    await expect(card(page, 2)).toBeVisible()
+    await expect(card(page, 3)).toBeVisible()
+    const elbow = await label.evaluate(node => {
+      const css = getComputedStyle(node, '::before'), bounds = node.getBoundingClientRect()
+      const range = document.createRange()
+      range.selectNodeContents(node)
+      const text = range.getClientRects()[0]
+      return { style: css.borderTopStyle, stroke: parseFloat(css.borderTopWidth),
+        top: bounds.top + node.clientTop + parseFloat(css.top),
+        right: bounds.left + parseFloat(css.left) + parseFloat(css.width),
+        textLeft: text.left, textTop: text.top, textBottom: text.bottom }
+    })
+    expect(elbow.style).toBe('dashed')
+    expect(elbow.stroke).toBe(2)
+    expect(elbow.top).toBeGreaterThan(elbow.textTop)
+    expect(elbow.top).toBeLessThan(elbow.textBottom)
+    expect(elbow.textLeft - elbow.right).toBeGreaterThan(3)
+    expect(elbow.textLeft - elbow.right).toBeLessThan(12)
+    const straight = card(page, 3).locator('.avatar-col .line.up')
+    await expect(straight).toHaveCSS('border-top-width', '0px')
+    await expect(straight).toHaveCSS('border-left-style', 'dashed')
+    await page.screenshot({ path: test.info().outputPath('reply-context.png') })
+  })
+
+  for (const [w, h] of [[800, 100], [40, 400]]) test(`pictures fit their proportions (${w}x${h}) before the feed appears`, async ({ page, host }) => {
+    const png = await page.evaluate(([w, h]) => {
+      const canvas = document.createElement('canvas')
+      canvas.width = w; canvas.height = h
+      canvas.getContext('2d').fillRect(0, 0, w, h)
+      return canvas.toDataURL('image/png').split(',')[1]
+    }, [w, h])
+    const hash = host.record(Buffer.concat([Buffer.from('version/1 image/png\n'), Buffer.from(png, 'base64')]))
+    host.post(1, `A picture\n![test picture](record:${hash})`)
+    const started = deferred(), release = deferred()
+    await page.route(`**/api/content/${hash}*`, async route => {
+      started.resolve(); await release.promise; await route.fallback()
+    })
+    try {
+      await page.goto('/')
+      await started.promise
+      const finish = await watchLayout(page, [1])
+      await frames(page)
+      await expect(card(page, 1)).not.toBeVisible()
+      release.resolve()
+      const img = card(page, 1).locator('.rec-image-stage img')
+      await expect(img).toBeVisible()
+      await expect.poll(() => img.evaluate(node => node.complete && node.naturalWidth > 0)).toBe(true)
+      const image = await img.boundingBox()
+      const stage = await card(page, 1).locator('.rec-image-stage').boundingBox()
+      expect(Math.abs(stage.height - image.height - 2), 'only the border surrounds the image vertically').toBeLessThanOrEqual(1)
+      expect(Math.abs(image.width / image.height - w / h), 'the image keeps its proportions').toBeLessThan(0.02)
+      expect(image.height).toBeLessThanOrEqual(320)
+      if (w > h) expect(image.height).toBeLessThan(150)
+      expectStable(await finish(), [1])
+    } finally { release.resolve() }
+  })
+
   test('notification reply context wraps long URLs inside its column', async ({ page, host }) => {
     const url = `https://basescan.org/tx/0x${'a'.repeat(64)}`
     host.post(1, `Another token burn: ${url}`)

@@ -18,9 +18,9 @@ const leaving = new WeakMap<HTMLElement, AbortController>()
  * repeatedly; as an attachment (`{@attach hydrateRecords}`) it re-runs when a
  * store it reads changes: the follow list, the connected account. The cleanup
  * it returns runs for a re-run too; only a body gone from the page stops its
- * pictures' downloads.
+ * pictures' downloads. `begin` tracks a load until decoding, failure or cancellation.
  */
-export function hydrateRecords(root: HTMLElement): () => void {
+export function hydrateRecords(root: HTMLElement, begin?: () => () => void): () => void {
   let left = leaving.get(root)
   if (!left) {
     left = new AbortController()
@@ -32,7 +32,7 @@ export function hydrateRecords(root: HTMLElement): () => void {
   for (const el of Array.from(root.querySelectorAll<HTMLElement>('[data-record]'))) {
     if (el.dataset.hydrating) continue
     el.dataset.hydrating = '1'
-    hydrate(el, anchor, open, signal)
+    hydrate(el, anchor, open, signal, begin)
   }
   return () => queueMicrotask(() => {
     if (root.isConnected) return
@@ -57,9 +57,9 @@ export function opensPictures(author: string | undefined): boolean {
   return follows.has(author) || wallet.is(author)
 }
 
-function hydrate(el: HTMLElement, anchor: Anchor | undefined, open: boolean, signal: AbortSignal): void {
+function hydrate(el: HTMLElement, anchor: Anchor | undefined, open: boolean, signal: AbortSignal, begin?: () => () => void): void {
   const hash = el.dataset.record as Hex
-  if (el.classList.contains('rec-image')) imageToggle(el, hash, anchor, open, signal)
+  if (el.classList.contains('rec-image')) imageToggle(el, hash, anchor, open, signal, begin)
   else attachmentStub(el, hash)
 }
 
@@ -90,7 +90,7 @@ function attachmentStub(el: HTMLElement, hash: Hex) {
  * previews; auto-loaded pictures leave streams compact. A record that turns
  * out not to be an image is left unopened, like any other non-image record.
  */
-function imageToggle(el: HTMLElement, hash: Hex, anchor: Anchor | undefined, open: boolean, signal: AbortSignal) {
+function imageToggle(el: HTMLElement, hash: Hex, anchor: Anchor | undefined, open: boolean, signal: AbortSignal, begin?: () => () => void) {
   const alt = el.dataset.alt || 'image'
   const box = document.createElement('div')
   box.className = 'rec-image-box'
@@ -133,79 +133,96 @@ function imageToggle(el: HTMLElement, hash: Hex, anchor: Anchor | undefined, ope
       }
       return
     }
-    loading = true
-    pressed = byReader
-    frame.hidden = false
-    frame.textContent = 'loading picture…'
-    box.dataset.openedPicture = String(pressed)
-    button.textContent = 'loading…'
-    // A picture that opens on its own waits for a shared slot; one the reader
-    // pressed does not, nor one pressed while it waited.
-    let release: (() => void) | null = null
-    if (!byReader) {
-      const waited = new AbortController()
-      jump = () => waited.abort()
-      const stop = () => waited.abort()
-      signal.addEventListener('abort', stop, { once: true })
-      release = await pictureSlots.take(waited.signal)
-      signal.removeEventListener('abort', stop)
-      jump = null
-      // A slot granted in the turn the body left goes back at once.
-      if (signal.aborted) {
-        release?.()
+    const finish = begin?.()
+    try {
+      loading = true
+      pressed = byReader
+      frame.hidden = false
+      frame.textContent = 'loading picture…'
+      box.dataset.openedPicture = String(pressed)
+      button.textContent = 'loading…'
+      // A picture that opens on its own waits for a shared slot; one the reader
+      // pressed does not, nor one pressed while it waited.
+      let release: (() => void) | null = null
+      if (!byReader) {
+        const waited = new AbortController()
+        jump = () => waited.abort()
+        const stop = () => waited.abort()
+        signal.addEventListener('abort', stop, { once: true })
+        release = await pictureSlots.take(waited.signal)
+        signal.removeEventListener('abort', stop)
+        jump = null
+        // A slot granted in the turn the body left goes back at once.
+        if (signal.aborted) {
+          release?.()
+          return
+        }
+      }
+      const content = await fetchContent(hash, anchor, signal).finally(() => release?.())
+      loading = false
+      if (!content.ok) {
+        frame.textContent =
+          content.reason === 'missing'
+            ? `image not available on this host (${shortHex(hash)})`
+            : content.reason === 'taken_down'
+              ? 'image removed by this host'
+              : content.reason === 'mismatch'
+                ? 'image failed verification, so it is not shown'
+                : `image could not be fetched (${content.detail})`
+        if (content.reason === 'mismatch' || content.reason === 'taken_down') button.remove()
+        else button.textContent = 'retry picture'
         return
       }
-    }
-    const content = await fetchContent(hash, anchor, signal).finally(() => release?.())
-    loading = false
-    if (!content.ok) {
-      frame.textContent =
-        content.reason === 'missing'
-          ? `image not available on this host (${shortHex(hash)})`
-          : content.reason === 'taken_down'
-            ? 'image removed by this host'
-            : content.reason === 'mismatch'
-              ? 'image failed verification, so it is not shown'
-              : `image could not be fetched (${content.detail})`
-      if (content.reason === 'mismatch' || content.reason === 'taken_down') button.remove()
-      else button.textContent = 'retry picture'
-      return
-    }
-    const d = decode(content.bytes)
-    if (!d.ok || !isInlineImage(d.envelope.mediaType)) {
-      frame.replaceChildren(notOpened(alt, hash))
-      button.remove()
-      return
-    }
-    const shown = document.createElement('img')
-    // The blob URL is only needed until the browser has decoded the picture.
-    shown.onload = () => URL.revokeObjectURL(shown.src)
-    shown.onerror = () => {
-      URL.revokeObjectURL(shown.src)
-      frame.textContent = 'this picture could not be decoded'
-      img = null
-      button.textContent = 'retry picture'
-    }
-    const bytes = d.envelope.body.slice()
-    const mediaType = d.envelope.mediaType
-    shown.src = URL.createObjectURL(new Blob([bytes], { type: mediaType }))
-    shown.alt = alt
-    // The inline picture is scaled to fit the column; a click opens it as large as the screen allows.
-    shown.className = 'zoomable'
-    shown.title = 'open full size'
-    shown.tabIndex = 0
-    shown.onclick = () => openLightbox(bytes, mediaType, alt, shown)
-    shown.onkeydown = (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault()
-        openLightbox(bytes, mediaType, alt, shown)
+      const d = decode(content.bytes)
+      if (!d.ok || !isInlineImage(d.envelope.mediaType)) {
+        frame.replaceChildren(notOpened(alt, hash))
+        button.remove()
+        return
       }
+      const shown = document.createElement('img')
+      // The blob URL is only needed until the browser has decoded the picture.
+      let settled!: () => void
+      const decoded = new Promise<void>(resolve => { settled = resolve })
+      shown.onload = () => {
+        URL.revokeObjectURL(shown.src)
+        settled()
+      }
+      shown.onerror = () => {
+        URL.revokeObjectURL(shown.src)
+        frame.textContent = 'this picture could not be decoded'
+        img = null
+        button.textContent = 'retry picture'
+        settled()
+      }
+      const bytes = d.envelope.body.slice()
+      const mediaType = d.envelope.mediaType
+      shown.src = URL.createObjectURL(new Blob([bytes], { type: mediaType }))
+      shown.alt = alt
+      // The inline picture is scaled to fit the column; a click opens it as large as the screen allows.
+      shown.className = 'zoomable'
+      shown.title = 'open full size'
+      shown.tabIndex = 0
+      shown.onclick = () => openLightbox(bytes, mediaType, alt, shown)
+      shown.onkeydown = (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          openLightbox(bytes, mediaType, alt, shown)
+        }
+      }
+      frame.replaceChildren(shown)
+      box.dataset.openedPicture = String(pressed)
+      img = shown
+      label.title = `${alt} (${fmtBytes(d.envelope.body.length)})`
+      button.textContent = 'hide picture'
+      signal.addEventListener('abort', settled, { once: true })
+      try {
+        if (!signal.aborted) await decoded
+      } finally {
+        signal.removeEventListener('abort', settled)
+      }
+    } finally {
+      finish?.()
     }
-    frame.replaceChildren(shown)
-    box.dataset.openedPicture = String(pressed)
-    img = shown
-    label.title = `${alt} (${fmtBytes(d.envelope.body.length)})`
-    button.textContent = 'hide picture'
   }
   button.onclick = () => void toggle(true)
   if (open) void toggle()

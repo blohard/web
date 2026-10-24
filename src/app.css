@@ -344,9 +344,9 @@ article.msg .body img { max-width: 100%; }
 .rec-image-bar::before { content: "🖼"; }
 .rec-image-bar .name { color: var(--fg); min-width: 0; overflow-wrap: anywhere; }
 .rec-image-bar button { color: var(--accent); font-weight: 600; flex-shrink: 0; min-width: 17ch; }
-.rec-image-stage { height: 320px; margin-top: .3rem; border: 1px dashed var(--border); display: grid; place-items: center; overflow: auto; color: var(--dim); }
+.rec-image-stage { margin-top: .3rem; border: 1px dashed var(--border); display: grid; place-items: center; overflow: auto; color: var(--dim); }
 .rec-image-stage[hidden] { display: none; }
-.rec-image-stage img { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.rec-image-stage img { display: block; width: auto; height: auto; max-width: 100%; max-height: 320px; }
 .rec-image-box img.zoomable { cursor: zoom-in; }
 /* A picture over the whole screen: fitted first, natural size and scrollable after a click on it. */
 .lightbox { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;

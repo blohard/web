@@ -46,7 +46,7 @@ test('a content body larger than any record the host stores is refused before ha
 })
 
 // Only the element operations used by the picture control; no DOM library.
-function placeholder(t, author) {
+function placeholder(t, author, begin) {
   const previous = globalThis.document
   const elements = []
   const element = (tag) => {
@@ -64,7 +64,7 @@ function placeholder(t, author) {
   t.after(() => { globalThis.document = previous })
   const stub = element('span')
   stub.dataset = { record: hash, alt: 'test picture' }
-  hydrateRecords({ dataset: { chain: '1', message: '2', author }, querySelectorAll: (selector) => selector === '[data-record]' ? [stub] : [] })
+  hydrateRecords({ dataset: { chain: '1', message: '2', author }, querySelectorAll: (selector) => selector === '[data-record]' ? [stub] : [] }, begin)
   return { box: stub.children[0], button: elements.find((el) => el.tag === 'button') }
 }
 async function click(button) {
@@ -131,7 +131,7 @@ test('automatically shown pictures stay compact until the reader chooses to open
   assert.equal(box.dataset.openedPicture, 'true')
 })
 
-test('an auto-loaded picture reserves its frame before the download and keeps it after a failure', async (t) => {
+test('an auto-loaded picture shows its loading frame and keeps its error visible', async (t) => {
   const author = `0x${'38'.repeat(20)}`
   follows.toggle(author)
   t.after(() => follows.toggle(author))
@@ -145,7 +145,7 @@ test('an auto-loaded picture reserves its frame before the download and keeps it
   for (let i = 0; i < 100 && !finish; i++) await setImmediate()
   finish(new Response(null, { status: 404 }))
   for (let i = 0; i < 100 && button.textContent === 'loading…'; i++) await setImmediate()
-  assert.equal(frame.hidden, false, 'an error must not collapse the reserved frame')
+  assert.equal(frame.hidden, false, 'an error must stay visible')
   assert.equal(button.textContent, 'retry picture')
 })
 
@@ -164,7 +164,7 @@ test('a taken-down picture says so and offers no retry', async (t) => {
 
 const cardBoxes = []
 // A card body with several pictures by a followed author, which open on their own.
-function card(t, count, author) {
+function card(t, count, author, begin) {
   const previous = globalThis.document
   const elements = []
   const element = (tag) => {
@@ -185,7 +185,7 @@ function card(t, count, author) {
     return stub
   })
   const root = { isConnected: true, dataset: { chain: '1', message: '2', author }, querySelectorAll: (s) => s === '[data-record]' ? stubs : [] }
-  const cleanup = hydrateRecords(root)
+  const cleanup = hydrateRecords(root, begin)
   cardBoxes.push(...stubs.map((stub) => stub.children[0]))
   return { root, cleanup, buttons: elements.filter((el) => el.tag === 'button') }
 }
@@ -254,4 +254,51 @@ test('pressing a picture while it waits for a slot opens it as the reader asked'
     const opened = cardBoxes.at(-1).dataset.openedPicture
     assert.equal(opened, 'true', 'a press lifts the containing preview, as an explicit show does')
   } finally { for (const release of held) release() }
+})
+
+for (const outcome of ['load', 'decode error', 'fetch error']) {
+  test(`picture readiness finishes once after ${outcome}`, async (t) => {
+    let waiting = 0, starts = 0, finishes = 0
+    const { box, button } = placeholder(t, undefined, () => {
+      starts++; waiting++
+      return () => { finishes++; waiting-- }
+    })
+    globalThis.fetch = async () => outcome === 'fetch error'
+      ? new Response(null, { status: 404 }) : new Response(bytes)
+    assert.equal(starts, 0, 'a closed picture does not delay display')
+    await click(button)
+    if (outcome !== 'fetch error') {
+      assert.equal(waiting, 1, 'fetch completion alone does not settle the image dimensions')
+      const img = box.children.find(el => el.className === 'rec-image-stage').children[0]
+      if (outcome === 'load') img.onload()
+      else img.onerror()
+    }
+    await microtasks()
+    assert.equal(waiting, 0)
+    assert.equal(finishes, 1)
+    if (outcome === 'load') {
+      await click(button)
+      await click(button)
+      assert.equal(starts, 1, 'hiding and showing a decoded image needs no new wait')
+    }
+  })
+}
+
+test('leaving while a picture waits for decoding finishes its display wait', async (t) => {
+  const author = `0x${'34'.repeat(20)}`
+  follows.toggle(author)
+  t.after(() => follows.toggle(author))
+  let waiting = 0
+  globalThis.fetch = async () => new Response(bytes)
+  const { root, cleanup, buttons } = card(t, 1, author, () => {
+    waiting++
+    return () => { waiting-- }
+  })
+  await microtasks()
+  assert.equal(buttons[0].textContent, 'hide picture')
+  assert.equal(waiting, 1)
+  root.isConnected = false
+  cleanup()
+  await microtasks()
+  assert.equal(waiting, 0)
 })
