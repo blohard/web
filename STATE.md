@@ -419,10 +419,11 @@ replacement hashes, receipt/lookup failures, held and failed uploads, manual
 retries and reloads from IndexedDB. Its model checks the exact signature,
 remaining bytes, pause state and eventual completion after service recovers.
 Separate seeded searches check that only successful scans advance the saved
-lower bound. Navigation, focus and retained
-DOM behavior are checked with the [manual release walkthrough](RELEASE_CHECKLIST.md),
-using `dev.html` for reproduction and real wallets for prompt checks; no
-browser-test framework or DOM library is required.
+lower bound. Playwright browser tests cover navigation, focus and retained DOM
+behavior; the production-build layout suite checks visual stability at desktop
+and mobile widths. Both suites run in CI. The
+[manual release walkthrough](RELEASE_CHECKLIST.md) supplements them with
+real-wallet prompt checks.
 
 The pending list observes operations and their completion events; it owns no
 retry timer. Navigation leaves scheduled recovery alive in the tab. Completion

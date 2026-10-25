@@ -1,5 +1,5 @@
 <script module lang="ts">
-  /** Only UI choices survive Back; replies and gates are read again. */
+  /** Back resumes retained reply snapshots and UI choices; explicit refresh advances them. */
   export type { ReplyViews } from './stream-expansion'
 </script>
 
