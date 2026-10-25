@@ -6,8 +6,8 @@ import { sameAddress } from '../../lib/format'
 import { muted } from '../../lib/muted.svelte'
 import { host } from '../../lib/host.svelte'
 import type { ChainInfo } from '../../lib/types'
-
 import { keyPosition, newerPosition, type KeyPosition } from './key-position'
+
 export type KeyActivity = KeyPosition & {
   creator: Address; amount: number; timestamp: number; transaction: Hex
 } & ({ kind: 'activation' } | { kind: 'purchase'; buyer: Address } | { kind: 'transfer'; from: Address; to: Address })

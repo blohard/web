@@ -214,8 +214,9 @@ This is a preview rule, not a claim that older replies have been read.
 
 `feed.ts` owns reads, retained records, cursors and recovery. It supplies known
 parents to the policy and retries waiting candidates when those parents arrive.
-Current mutes and endings are applied before `conversation.ts` arranges the
-selected records and their context into cards, labels and connectors. Curated
+Current mutes and endings determine eligibility. `feed-selection.ts` groups
+those eligible records and their loaded context without changing eligibility;
+`conversation.ts` prepares the previews, context cards, labels and connectors. Curated
 membership comes from the host on page reads; quiet polls and local-publication
 merges share the existing eligibility check. Posts and replies qualify when their
 author is curated; the reader's own replies also qualify when the parent author is curated.

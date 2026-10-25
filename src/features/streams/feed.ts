@@ -1,5 +1,6 @@
 // Feed retrieval owns pagination, retained snapshots and recovery. Selection
-// rules live in feed-policy.ts; conversation.ts prepares their cards and context.
+// rules live in feed-policy.ts; feed-selection.ts groups eligible records and
+// context, and conversation.ts prepares their cards.
 import { selectConversations } from './feed-selection'
 import { listening, QuietChanges, type Listener } from './quiet-changes'
 import { SerialQueue } from '../../shared/serial-queue'
