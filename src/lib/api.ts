@@ -1,5 +1,6 @@
 // The host's application API. Ethereum calldata belongs to wallet submission;
 // page readers exchange records and cursors here.
+import { wireAddress, wireHash, uint32, uint64 } from '../shared/wire-values.ts'
 import { ResponseTooLarge } from '../shared/response-bytes.ts'
 import { responseJson, retryAfter as retryAfterOf } from '../shared/response-json.ts'
 import { encodeAbiParameters, keccak256, zeroAddress, type Address, type Hex } from 'viem'
@@ -73,19 +74,17 @@ export async function requestPath<T>(path: string, body?: unknown): Promise<T> {
   return result as T
 }
 
-const UINT64 = (1n << 64n) - 1n
 export function integer(value: string): bigint {
   if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value)) throw new Error('invalid host integer')
-  const n = BigInt(value)
-  if (n > UINT64) throw new Error('host integer exceeds uint64')
-  return n
+  if (!uint64(value)) throw new Error('host integer exceeds uint64')
+  return BigInt(value)
 }
 const address = (value: string): Address => {
-  if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(value)) throw new Error('invalid host address')
+  if (!wireAddress(value)) throw new Error('invalid host address')
   return value.toLowerCase() as Address
 }
 const hash = (value: string): Hex => {
-  if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(value)) throw new Error('invalid host hash')
+  if (!wireHash(value)) throw new Error('invalid host hash')
   return value.toLowerCase() as Hex
 }
 
@@ -101,7 +100,7 @@ export function record(m: WireRecord): RecordImage {
   const id = integer(m.id), parentId = integer(m.parent)
   const author = address(m.author), parentAuthor = address(m.parent_author)
   if (id === 0n || parentId >= id || author === zeroAddress || (parentId === 0n) !== (parentAuthor === zeroAddress)) throw new Error('invalid host message')
-  if (!Number.isInteger(m.timestamp) || m.timestamp < 0 || m.timestamp > 0xffffffff || !Number.isSafeInteger(m.position.log) || m.position.log < 0) throw new Error('invalid host position')
+  if (!uint32(m.timestamp) || !Number.isSafeInteger(m.position.log) || m.position.log < 0) throw new Error('invalid host position')
   const replies = integer(m.replies)
   if (replies > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('reply count exceeds the display limit')
   const result = {

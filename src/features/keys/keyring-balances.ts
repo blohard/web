@@ -1,5 +1,6 @@
 import { sameAddress } from '../../lib/format'
-import { getAddress, isAddress, type Address } from 'viem'
+import { getAddress, type Address } from 'viem'
+import { wireAddress, wireHash, uint32, uint64 } from '../../shared/wire-values'
 import { request } from '../../lib/api'
 import type { ChainInfo } from '../../lib/types'
 
@@ -25,22 +26,18 @@ export async function readKeyringPage(chain: ChainInfo, account: Address, market
     market: unknown; view: unknown; active: unknown; own_balance: unknown; total: unknown;
     entries: unknown; next: unknown; checkpoint: { block: unknown; hash: unknown }
   }>(chain, `keyring/${account}/balances?${params}`)
-  const quantity = (value: unknown, min: number): value is number =>
-    typeof value === 'number' && Number.isInteger(value) && value >= min && value <= 0xffff_ffff
   if (!result || typeof result.market !== 'string' || !sameAddress(result.market, market)
-    || result.view !== side || typeof result.active !== 'boolean' || !quantity(result.own_balance, 0)
+    || result.view !== side || typeof result.active !== 'boolean' || !uint32(result.own_balance)
     || typeof result.total !== 'number' || !Number.isSafeInteger(result.total) || result.total < 0
     || !Array.isArray(result.entries) || result.entries.length > limit || result.entries.length > result.total
-    || typeof result.checkpoint?.block !== 'string' || !/^(0|[1-9][0-9]{0,19})$/.test(result.checkpoint.block)
-    || BigInt(result.checkpoint.block) > 0xffff_ffff_ffff_ffffn
-    || typeof result.checkpoint.hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(result.checkpoint.hash)) {
+    || !uint64(result.checkpoint?.block) || !wireHash(result.checkpoint.hash)) {
     throw new Error('invalid keyring balances')
   }
   let previous = after?.toLowerCase() ?? ''
   const entries: KeyBalance[] = result.entries.map(entry => {
-    if (!entry || typeof entry.address !== 'string' || !isAddress(entry.address, { strict: false })
+    if (!entry || !wireAddress(entry.address)
       || entry.address.toLowerCase() <= previous || sameAddress(entry.address, account)
-      || !quantity(entry.balance, 1)) throw new Error('invalid keyring balances')
+      || !uint32(entry.balance) || entry.balance === 0) throw new Error('invalid keyring balances')
     previous = entry.address.toLowerCase()
     return { address: getAddress(entry.address), balance: entry.balance }
   })

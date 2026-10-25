@@ -1,6 +1,7 @@
 // Public activations, purchases and transfers. The host replays these from its accepted
 // key-market journal; this path never asks a wallet or a chain RPC.
-import { getAddress, isAddress, type Address, type Hex } from 'viem'
+import { getAddress, type Address, type Hex } from 'viem'
+import { wireAddress, wireHash, uint32 } from '../../shared/wire-values'
 import { request } from '../../lib/api'
 import { sameAddress } from '../../lib/format'
 import { muted } from '../../lib/muted.svelte'
@@ -15,7 +16,7 @@ export const keyActivityId = (e: KeyActivity) => `key/${e.block}/${e.log}`
 export const keyActivityAccounts = (e: KeyActivity) => e.kind === 'activation' ? [e.creator] : e.kind === 'purchase' ? [e.creator, e.buyer] : [e.creator, e.from, e.to]
 export const visibleKeyActivity = (e: KeyActivity) => !keyActivityAccounts(e).some(a => muted.has(a) || host.blocked(a))
 function address(v: unknown): Address {
-  if (typeof v !== 'string' || !isAddress(v, { strict: false })) throw Error('invalid key activity account')
+  if (!wireAddress(v)) throw Error('invalid key activity account')
   return getAddress(v)
 }
 export async function readKeyActivity(chain: ChainInfo, market: Address, before: KeyPosition | null = null, limit = 100) {
@@ -28,9 +29,9 @@ export async function readKeyActivity(chain: ChainInfo, market: Address, before:
   let previous = before
   const items = r.items.map((n: any): KeyActivity => {
     const p = keyPosition(n.position, 'activity'), e = n.event
-    if (!e || !Number.isInteger(e.amount) || e.amount < (e.kind === 'activated' ? 0 : 1) || e.amount > 0xffff_ffff
-      || !Number.isInteger(n.timestamp) || n.timestamp < 0 || n.timestamp > 0xffff_ffff
-      || typeof n.transaction !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(n.transaction)
+    if (!e || !uint32(e.amount) || (e.kind !== 'activated' && e.amount === 0)
+      || !uint32(n.timestamp)
+      || !wireHash(n.transaction)
       || p.block > checkpoint.block || (previous && newerPosition(p, previous) <= 0)) throw Error('invalid key activity event')
     previous = p
     const shared = { ...p, creator: address(e.creator), amount: e.amount, timestamp: n.timestamp, transaction: n.transaction as Hex }

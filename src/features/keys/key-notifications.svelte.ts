@@ -1,4 +1,5 @@
-import { getAddress, isAddress, type Address, type Hex } from 'viem'
+import { getAddress, type Address, type Hex } from 'viem'
+import { wireAddress, wireHash, uint32 } from '../../shared/wire-values'
 import { request } from '../../lib/api'
 import { sameAddress } from '../../lib/format'
 import { muted } from '../../lib/muted.svelte'
@@ -27,20 +28,20 @@ export async function readKeyNotifications(chain: ChainInfo, market: Address, ac
   let previous = before
   const items: KeyNotification[] = r.items.map((n: any): KeyNotification => {
     const p = keyPosition(n.position, 'trade')
-    if (!Number.isInteger(n.amount) || n.amount < 1 || n.amount > 0xffff_ffff
-      || !Number.isInteger(n.timestamp) || n.timestamp < 0 || n.timestamp > 0xffff_ffff
-      || typeof n.transaction !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(n.transaction)
+    if (!uint32(n.amount) || n.amount === 0
+      || !uint32(n.timestamp)
+      || !wireHash(n.transaction)
       || p.block > checkpoint.block || (previous && newerPosition(p, previous) <= 0)) throw Error('invalid key trade notification')
     previous = p
     const shared = { chain, amount: n.amount, timestamp: n.timestamp, transaction: n.transaction as Hex, ...p }
     if (n.kind === 'received') {
-      if (!isAddress(n.creator, { strict: false }) || !isAddress(n.from, { strict: false }) || sameAddress(n.from, account)) {
+      if (!wireAddress(n.creator) || !wireAddress(n.from) || sameAddress(n.from, account)) {
         throw Error('invalid received keys notification')
       }
       return { kind: 'key-received', creator: getAddress(n.creator), from: getAddress(n.from), ...shared }
     }
     // Only a market that is active can have been traded.
-    if (n.kind !== 'trade' || !r.active || !isAddress(n.trader, { strict: false }) || sameAddress(n.trader, account)
+    if (n.kind !== 'trade' || !r.active || !wireAddress(n.trader) || sameAddress(n.trader, account)
       || typeof n.buy !== 'boolean') throw Error('invalid key trade notification')
     return { kind: 'key-trade', trader: getAddress(n.trader), buy: n.buy, ...shared }
   })
