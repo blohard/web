@@ -279,12 +279,17 @@ the bounded wait; later name, quote and clipping updates can still change layout
 `lib/avatars.ts` shares downloads and caches blobs by account and source URL.
 Each answer carries its timestamp: pictures are fresh for seven days from
 fetching (a disk hit does not restart that clock), failures and refusals for
-one hour. IndexedDB keeps the existing seven-day cache, pruned on its first
-use in a page.
+one hour. Fresh reads move an entry to the end of the cache; insertions drop
+expired entries, then the least recently read until at most 256 answers and
+32 MiB of blob bytes remain. IndexedDB keeps the existing seven-day cache,
+pruned on its first use in a page. Memory eviction leaves those disk copies.
 
 Each mounted `Avatar` owns its object URL and revokes it when its account or
 source changes, or when it unmounts. Late results for an old identity create
-no URL. A name-only update keeps the same image.
+no URL. A name-only update keeps the same image. Eviction affects subsequent
+cache reads, not mounted pictures, and does not trigger their refetch. The
+memory-cache bounds exclude images retained by mounted components and downloads
+still in flight; they are not a bound on the browser's total image memory.
 Mounted pictures do not refresh on a timer. A CORS fetch failure still permits
 the original image URL; refused content still shows an identicon. A component
 mounting after a failure expires waits for the refetch before using the fallback;

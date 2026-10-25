@@ -13,6 +13,8 @@ type Cached = { address: string; url: string; blob: Blob; fetchedAt: number }
 const TTL = 7 * 24 * 60 * 60_000
 const MAX_BYTES = 1 << 20
 const TIMEOUT_MS = 15_000
+const MAX_ENTRIES = 256
+const MAX_CACHED_BYTES = 32 << 20
 /** A failure or refusal is asked about again after an hour; only a picture is kept longer. */
 const NEGATIVE_TTL = 60 * 60_000
 
@@ -31,6 +33,8 @@ type Entry = { picture: Picture; at: number }
 const fresh = (entry: Entry) => Date.now() - entry.at < (entry.picture instanceof Blob ? TTL : NEGATIVE_TTL)
 
 export class Avatars {
+  // Least recently read first. Mounted components retain their own picture;
+  // evicting here must not invalidate them or start new requests from them.
   private ready = new Map<string, Entry>()
   private inflight = new Map<string, Promise<Picture>>()
   /** The one sweep of expired entries, made the first time the cache is read in this page. */
@@ -55,14 +59,33 @@ export class Avatars {
     const k = JSON.stringify([address.toLowerCase(), url])
     const known = this.ready.get(k)
     if (known && fresh(known)) {
+      this.ready.delete(k)
+      this.ready.set(k, known)
       return Promise.resolve(known.picture)
     }
     this.ready.delete(k)
     return sharedRead(this.inflight, k, async () => {
       const entry = await this.load(address.toLowerCase(), url)
-      this.ready.set(k, entry)
+      this.remember(k, entry)
       return entry.picture
     })
+  }
+
+  private remember(k: string, entry: Entry) {
+    this.ready.delete(k)
+    this.ready.set(k, entry)
+    // Recount this small bounded cache on insertion instead of maintaining
+    // another mutable byte counter alongside the entries.
+    let bytes = 0
+    for (const [key, value] of this.ready) {
+      if (!fresh(value)) this.ready.delete(key)
+      else if (value.picture instanceof Blob) bytes += value.picture.size
+    }
+    for (const [key, value] of this.ready) {
+      if (this.ready.size <= MAX_ENTRIES && bytes <= MAX_CACHED_BYTES) break
+      this.ready.delete(key)
+      if (value.picture instanceof Blob) bytes -= value.picture.size
+    }
   }
 
   private async load(address: string, url: string): Promise<Entry> {

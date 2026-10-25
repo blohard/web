@@ -146,3 +146,33 @@ test('refused images retry after an hour just like failures', async (t) => {
   assert.equal(await avatars.read(who, url), false)
   assert.equal(calls, 2)
 })
+
+const account = i => `0x${i.toString(16).padStart(40, '0')}`
+test('the memory entry cap evicts least-recently-read answers, including failures', async () => {
+  let calls = 0
+  globalThis.fetch = async () => { calls++; throw Error('offline') }
+  const url = 'https://pics.invalid/offline'
+  for (let i = 1; i <= 256; i++) assert.equal(await avatars.read(account(i), url), null)
+  await avatars.read(account(1), url) // Make the oldest entry recent.
+  await avatars.read(account(257), url)
+  assert.equal(calls, 257)
+  await avatars.read(account(1), url)
+  assert.equal(calls, 257, 'the recent answer survived')
+  await avatars.read(account(2), url)
+  assert.equal(calls, 258, 'the least-recent answer was evicted')
+})
+
+test('the memory byte cap evicts blobs without discarding disk copies or retained blobs', async () => {
+  let calls = 0
+  globalThis.fetch = async () => { calls++; return new Response(new Uint8Array(1 << 20), { headers: { 'content-type': 'image/png' } }) }
+  const url = 'https://pics.invalid/large'
+  const retained = await avatars.read(account(1), url)
+  const cold = await avatars.read(account(2), url)
+  for (let i = 3; i <= 32; i++) await avatars.read(account(i), url)
+  assert.equal(await avatars.read(account(1), url), retained, 'exactly 32 MiB fits')
+  await avatars.read(account(33), url)
+  assert.equal(await avatars.read(account(1), url), retained, 'recent blob survives')
+  assert.notEqual(await avatars.read(account(2), url), cold, 'oldest blob was evicted and cloned from disk')
+  assert.equal(calls, 33, 'eviction costs a disk read, not another network request')
+  assert.equal((await cold.arrayBuffer()).byteLength, 1 << 20, 'an existing reader still owns its blob')
+})

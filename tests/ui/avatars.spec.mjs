@@ -43,6 +43,27 @@ for (const width of [1100, 390]) test(`mounted avatars own their URLs at ${width
   expect(await page.evaluate(() => [...avatarUrls.revoked].sort())).toEqual(await page.evaluate(() => [...avatarUrls.created].sort()))
 })
 
+test('cache eviction does not disturb mounted avatars or refetch their images', async ({ page, host }) => {
+  let requests = 0
+  await page.route('https://avatars.invalid/**', route => { requests++; return route.fulfill({ contentType: 'image/png', body: png }) })
+  await setup(page)
+  await page.evaluate(({ author, url }) => { avatarFixture.set(author, url); avatarFixture.show('first', author) }, { author, url })
+  await loaded(page.locator('#first img'))
+  const src = await page.locator('#first img').getAttribute('src')
+  await page.evaluate(async url => {
+    const { avatars } = await import('/src/lib/avatars.ts')
+    for (let i = 1; i <= 257; i++) await avatars.read(`0x${i.toString(16).padStart(40, '0')}`, url)
+  }, url)
+  await loaded(page.locator('#first img'))
+  expect(await page.locator('#first img').getAttribute('src')).toBe(src)
+  expect(await page.evaluate(() => avatarUrls.created)).toEqual([src])
+  expect(await page.evaluate(() => avatarUrls.revoked)).toEqual([])
+  expect(requests).toBe(258)
+  await page.evaluate(author => avatarFixture.show('second', author), author)
+  await loaded(page.locator('#second img'))
+  expect(requests, 'an evicted blob still comes from disk').toBe(258)
+})
+
 test('a source change revokes the old URL, but a name-only update keeps it', async ({ page, host }) => {
   await page.route('https://avatars.invalid/**', route => route.fulfill({ contentType: 'image/png', body: png }))
   await setup(page)
