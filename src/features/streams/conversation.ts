@@ -151,6 +151,8 @@ export type ConversationRowData = {
   activity?: Posted
   /** Automatic-preview cutoff, retained during paging and Back. */
   previewAfter?: Posted
+  /** Retained previews exclude cards added only as their parent context. */
+  previewIds?: ReadonlySet<bigint>
   root: { id: bigint; post: Posted | undefined; drawn: number; joins: boolean; omitted: boolean }
   cards: { post: Posted; drawn: number; joins: boolean; gap: boolean }[]
 }
@@ -202,6 +204,7 @@ export function prepareRow(filter: Filter, lead: Posted, source: RowSource, {
   const cards = curated ? branchOrder(selected) : selected.sort(oldestFirst)
   return {
     kind: 'pair', depthFirst: curated, key, lead, previewAfter,
+    previewIds: new Set(preview.map(p => p.id)),
     root: { id, post: root, omitted, drawn: cards.filter(p => p.parentId === id && !source.ended.has(p.id)).length, joins: !omitted && cards[0]?.parentId === id },
     cards: conversationCards(id, cards, source.ended),
   }

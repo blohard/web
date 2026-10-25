@@ -511,3 +511,19 @@ test('Curated keeps an opened context branch separate from a newer sibling branc
   assert.deepEqual(ids(refreshed.rows[2].cards.map(c => c.post)), [3])
   assert.equal(expansion.isOpen(2n), true, 'the older branch retains its own expansion choice')
 })
+
+for (const stream of ['curated', 'following', 'everyone']) test(`${stream} returning and paging preserve context without revealing another ancestor`, async () => {
+  curate([author])
+  const other = address('88')
+  const filter = stream === 'following'
+    ? { kind: 'following', authors: [author], includeRepliesToViewer: false }
+    : { kind: 'timeline', curatedOnly: stream === 'curated', viewer: author }
+  feedHistory([feedPost(1, 0, other), feedPost(2, 1), feedPost(3), feedPost(4, 2)])
+  const first = await counted(loadFeed(mock.chain, filter))
+  assert.deepEqual(ids(first.rows[0].cards.map(c => c.post)), [2, 4])
+  assert.equal(first.rows[0].root.omitted, stream !== 'everyone', 'only an independently selected root stays above this context')
+  for (const read of [resumeFeed, resumeFeed, olderFeed]) {
+    const returned = await counted(read(mock.chain, filter))
+    assert.deepEqual(returned.rows, first.rows, 'retaining a context card must not promote it into an automatic preview')
+  }
+})

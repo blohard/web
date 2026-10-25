@@ -281,7 +281,7 @@ async function select(f: Filter, v: View, chain: ChainInfo, preservePreviews = f
     return { ...prepareRow(f, p, source, {
       previewAfter: after,
       newSince: homeStream ? newSince : undefined,
-      keep: homeStream && saved ? new Set(saved.cards.map(c => c.post.id)) : undefined,
+      keep: homeStream ? saved?.previewIds : undefined,
       isOpen: id => homeStream && branchOpen(key, row, id),
     }), activity: activity.get(p.id) ?? p }
   })
