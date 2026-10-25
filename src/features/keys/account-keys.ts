@@ -26,7 +26,7 @@ export function tradeKeyAmount(text: string): bigint {
   return amount
 }
 
-export type KeyQuote = { curveValue: bigint; creatorFee: bigint; devFee: bigint; total: bigint }
+type KeyQuote = { curveValue: bigint; creatorFee: bigint; devFee: bigint; total: bigint }
 const verifiedMarkets = new Map<string, Promise<void>>()
 
 // Recent account views share a minimum block across navigation and RPC changes.

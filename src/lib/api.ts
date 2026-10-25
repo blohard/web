@@ -20,7 +20,7 @@ export type RecordImage = MessageRecord & {
 }
 type MessageAnswer = { at: At; message: WireRecord; ancestors: WireRecord[] }
 export type Page<C = Cursor, R = WireRecord> = { at: At; items: R[]; next: C | null }
-export type WireReference = WireRecord & { reference:
+type WireReference = WireRecord & { reference:
   | { kind: 'mention'; account: Address }
   | { kind: 'quote'; target: { chain: string; id: string; commit: Hex } }
 }

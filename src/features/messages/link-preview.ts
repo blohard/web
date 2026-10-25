@@ -36,7 +36,7 @@ export function previewLink(text: string, maxAttachments = 4, origin = globalThi
   return null
 }
 
-export type PostLink = Omit<Quote, 'commit'> & { commit?: Quote['commit'] }
+type PostLink = Omit<Quote, 'commit'> & { commit?: Quote['commit'] }
 
 /** Same-site post links use the router's validation, including commitment pins. */
 export function previewPost(text: string, maxAttachments = 4, origin = globalThis.location?.origin): PostLink | null {

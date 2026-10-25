@@ -4,7 +4,7 @@ import { KeyNotifications, keyNoticeId, keyNoticeParty, type KeyNotification } f
 import { SerialQueue } from '../../shared/serial-queue'
 import type { ChainInfo, Status } from '../../lib/types'
 
-export type Activity = Notification | KeyNotification
+type Activity = Notification | KeyNotification
 const isKey = (n: Activity): n is KeyNotification => n.kind === 'key-trade' || n.kind === 'key-received'
 export const activityId = (n: Activity) => isKey(n) ? keyNoticeId(n) : `post/${n.chain.id}/${n.post.id}`
 export const activityAuthor = (n: Activity) => isKey(n) ? keyNoticeParty(n) : n.post.author

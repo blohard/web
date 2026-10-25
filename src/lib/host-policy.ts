@@ -10,7 +10,7 @@ import { guarded } from './signer'
 import { pollVisible } from '../shared/visible-poll'
 
 export type HostList = 'curated' | 'blocked' | 'bots'
-export type ListEdit = { revision: string; expires: number; list: HostList; action: 'add' | 'remove'; addresses: Address[] }
+type ListEdit = { revision: string; expires: number; list: HostList; action: 'add' | 'remove'; addresses: Address[] }
 
 export function policyMessage(origin: string, edit: ListEdit): string {
   return `Host policy update\nHost: ${origin}\nRevision: ${edit.revision}\nExpires: ${edit.expires}\nList: ${edit.list}\nAction: ${edit.action}\nAddresses:\n${edit.addresses.map(a => a.toLowerCase()).join('\n')}`
@@ -115,12 +115,12 @@ export async function declareBot(wallet: ActionWallet, bot: boolean): Promise<vo
 
 /** The admin's private list of content hashes this host neither serves nor accepts. */
 export type Takedowns = { revision: string; hashes: Hex[] }
-export type TakedownEdit = { revision: string; expires: number; action: 'add' | 'remove'; hashes: Hex[] }
+type TakedownEdit = { revision: string; expires: number; action: 'add' | 'remove'; hashes: Hex[] }
 
-export function takedownMessage(origin: string, edit: TakedownEdit): string {
+function takedownMessage(origin: string, edit: TakedownEdit): string {
   return `Host takedown update\nHost: ${origin}\nRevision: ${edit.revision}\nExpires: ${edit.expires}\nAction: ${edit.action}\nHashes:\n${edit.hashes.map(h => h.toLowerCase()).join('\n')}`
 }
-export function takedownViewMessage(origin: string, expires: number): string {
+function takedownViewMessage(origin: string, expires: number): string {
   return `Host takedown list\nHost: ${origin}\nExpires: ${expires}`
 }
 function checkedTakedowns(list: Takedowns): Takedowns {

@@ -13,8 +13,8 @@ export type KeyActivity = KeyPosition & {
   creator: Address; amount: number; timestamp: number; transaction: Hex
 } & ({ kind: 'activation' } | { kind: 'purchase'; buyer: Address } | { kind: 'transfer'; from: Address; to: Address })
 export const keyActivityId = (e: KeyActivity) => `key/${e.block}/${e.log}`
-export const keyActivityAccounts = (e: KeyActivity) => e.kind === 'activation' ? [e.creator] : e.kind === 'purchase' ? [e.creator, e.buyer] : [e.creator, e.from, e.to]
-export const visibleKeyActivity = (e: KeyActivity) => !keyActivityAccounts(e).some(a => muted.has(a) || host.blocked(a))
+const keyActivityAccounts = (e: KeyActivity) => e.kind === 'activation' ? [e.creator] : e.kind === 'purchase' ? [e.creator, e.buyer] : [e.creator, e.from, e.to]
+const visibleKeyActivity = (e: KeyActivity) => !keyActivityAccounts(e).some(a => muted.has(a) || host.blocked(a))
 function address(v: unknown): Address {
   if (!wireAddress(v)) throw Error('invalid key activity account')
   return getAddress(v)

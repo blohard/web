@@ -20,7 +20,7 @@ import type { ChainInfo } from '../../lib/types'
 import { wallet } from '../../lib/wallet.svelte'
 
 /** What the cards read and write; tests pass their own. */
-export const authorGateDeps = {
+const authorGateDeps = {
   readAuthorGate, hasBlockedAccounts, saveAuthorGate, keyReplyDeployment,
   gate: (chain: ChainInfo, address: Address) => gates.author(chain, address),
   confirm: (message: string) => window.confirm(message),

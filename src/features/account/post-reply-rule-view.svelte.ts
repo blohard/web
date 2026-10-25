@@ -15,7 +15,7 @@ import { ScopedAction } from '../../lib/scoped-action.svelte'
 import type { ChainInfo } from '../../lib/types'
 import { wallet } from '../../lib/wallet.svelte'
 
-export type PostReplyRuleInput = {
+type PostReplyRuleInput = {
   chain: ChainInfo
   address: Address
   gate: Address
@@ -25,7 +25,7 @@ export type PostReplyRuleInput = {
 }
 
 /** The reads the picker makes; tests pass their own. */
-export const postReplyRuleReads = { authorGate, hasBlockedAccounts, keyReplyDeployment, accountKeyStatus }
+const postReplyRuleReads = { authorGate, hasBlockedAccounts, keyReplyDeployment, accountKeyStatus }
 
 export function postReplyRuleView(input: () => PostReplyRuleInput, reads = postReplyRuleReads) {
   const props = $derived(input())

@@ -60,7 +60,7 @@ export function accountReplyLabel(chain: ChainInfo, gate: Address | undefined, e
   return otherGateLabel(chain, gate)
 }
 
-export type PostReplyChoice = 'default' | 'all' | 'keys' | 'closed'
+type PostReplyChoice = 'default' | 'all' | 'keys' | 'closed'
 /** Explicit rules always enforce blocks; an existing custom gate remains visibly distinct. */
 export function postReplyChoice(chain: ChainInfo, gate: Address): PostReplyChoice | 'other' {
   if (replyGateKind(chain, gate) === 'closed') return 'closed'

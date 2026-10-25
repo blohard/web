@@ -8,7 +8,7 @@ import type { ChainInfo, Eip1193Provider, ListInfo } from './types'
 import { registryAbi } from './abi/registry'
 export { registryAbi } from './abi/registry'
 
-export type ListRef = Pick<ListInfo, 'registry' | 'id' | 'owner'>
+type ListRef = Pick<ListInfo, 'registry' | 'id' | 'owner'>
 const listKey = (list: ListRef): List => ({ registry: list.registry, owner: list.owner, list: list.id })
 
 /** A membership question is a point lookup, never a walk of the owner's list. */

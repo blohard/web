@@ -5,7 +5,7 @@
 // only; it never takes clicks, never moves the layout, and is skipped for
 // readers who ask for less motion.
 
-export type Particle = { dx: number; dy: number; fall: number; spin: number; delay: number; size: number }
+type Particle = { dx: number; dy: number; fall: number; spin: number; delay: number; size: number }
 
 /** More keys for bigger purchases, within bounds. */
 export const burstCount = (amount: bigint): number => 5 + Number(amount < 11n ? amount : 11n)

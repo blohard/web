@@ -4,7 +4,7 @@
 import type { Hex } from 'viem'
 
 /** A pasted post link, or a content hash (bare or inside a content link). */
-export type TakedownTarget = { kind: 'post'; chainId: number; id: bigint } | { kind: 'hash'; hash: Hex }
+type TakedownTarget = { kind: 'post'; chainId: number; id: bigint } | { kind: 'hash'; hash: Hex }
 
 export function parseTakedownInput(text: string): TakedownTarget | null {
   const post = /\/p\/([1-9][0-9]*)\/([1-9][0-9]*)/.exec(text)

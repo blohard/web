@@ -6,7 +6,7 @@ import type { Address } from 'viem'
 import type { ChainInfo } from '../../lib/types'
 import { SerialQueue } from '../../shared/serial-queue'
 
-export type ActivityRow = { kind: 'post'; key: string; row: ConversationRowData } | { kind: 'key'; key: string; event: KeyActivity }
+type ActivityRow = { kind: 'post'; key: string; row: ConversationRowData } | { kind: 'key'; key: string; event: KeyActivity }
 export type ActivityPage = Page & { entries: ActivityRow[]; keyError?: boolean }
 export const postActivity = (page: Page): ActivityPage => ({ ...page, entries: page.rows.map(row => ({ kind: 'post', key: String(row.key), row })) })
 function position(row: ActivityRow) {

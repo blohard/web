@@ -9,7 +9,7 @@ import { host } from './host.svelte'
 import type { MobileWalletModule, RemoteWallet } from './remote-wallet'
 import { readJSON } from './storage'
 
-export type MobileWallet = { name: string; module: string; notice: string | null }
+type MobileWallet = { name: string; module: string; notice: string | null }
 
 /**
  * The connector this build was given: `VITE_MOBILE_WALLET_NAME` is the choice

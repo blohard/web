@@ -12,7 +12,7 @@ const hashOf = (value: unknown): Hex | null =>
  * The transaction and its wallet prompt outlive any page that displays them.
  * `T` is what a confirmation reports; `settled` runs first, before its listeners.
  */
-export class TrackedTransaction<T = void> {
+class TrackedTransaction<T = void> {
   hash = $state<Hex | null>(null)
   saved = $state(true)
   private flight = $state<symbol | null>(null)

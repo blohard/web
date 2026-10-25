@@ -5,7 +5,7 @@ import { request } from '../../lib/api'
 import type { ChainInfo } from '../../lib/types'
 
 export type KeyringSide = 'holding' | 'holders'
-export type KeyBalance = { address: Address; balance: number }
+type KeyBalance = { address: Address; balance: number }
 export type KeyringPage = {
   active: boolean
   entries: KeyBalance[]

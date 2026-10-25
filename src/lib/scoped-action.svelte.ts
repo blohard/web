@@ -4,7 +4,7 @@
 // it runs, and neither its choice nor its late answer shows on the other one.
 import { explain } from './errors'
 
-export type ActionNote = { identity: string; ok: boolean; text: string }
+type ActionNote = { identity: string; ok: boolean; text: string }
 
 export class ScopedAction<P = undefined> {
   #identity: () => string

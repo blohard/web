@@ -17,7 +17,7 @@ export type Filter = { viewer?: Address } & (
 
 /** Home's Following includes replies to the viewer; Keyring selects only its authors. */
 export type HomeFilter = Extract<Filter, { kind: 'timeline' | 'following' }>
-export type PostSelection = 'selected' | 'excluded' | 'waiting-for-parent'
+type PostSelection = 'selected' | 'excluded' | 'waiting-for-parent'
 
 /** Muted authors are left out of streams, not of a profile deliberately opened. */
 export const appliesMutes = (filter: Filter): boolean => filter.kind !== 'author' && filter.kind !== 'author-replies'

@@ -15,7 +15,7 @@ import { readJSON, writeJSON } from '../../lib/storage'
 import type { ChainInfo, Status } from '../../lib/types'
 
 const PREFIX = 'blohard.notifications-seen.'
-export type NotificationVisit = { account: Address; heard: number }
+type NotificationVisit = { account: Address; heard: number }
 const validTime = (time: unknown): time is number =>
   typeof time === 'number' && Number.isSafeInteger(time) && time >= -1 && time <= 0xffff_ffff
 

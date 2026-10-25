@@ -32,7 +32,7 @@ function immutableRecord(r: RecordImage): MessageRecord {
 }
 
 /** The record does not carry the commitment a quote pinned: an answer, not an outage. */
-export class QuoteMismatch extends Error {
+class QuoteMismatch extends Error {
   constructor() { super('quote commitment does not match this message') }
 }
 
