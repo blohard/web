@@ -1,7 +1,8 @@
 import { getAddress, isAddress, type Address, type Hex } from 'viem'
-import { integer, request } from '../../lib/api'
+import { request } from '../../lib/api'
 import { sameAddress } from '../../lib/format'
 import { muted } from '../../lib/muted.svelte'
+import { keyPosition, newerPosition, type KeyPosition } from './key-position'
 import type { ChainInfo } from '../../lib/types'
 
 type KeyNotice = { chain: ChainInfo; amount: number; timestamp: number; transaction: Hex; block: bigint; log: number }
@@ -9,36 +10,27 @@ type KeyNotice = { chain: ChainInfo; amount: number; timestamp: number; transact
 export type KeyNotification =
   | KeyNotice & { kind: 'key-trade'; trader: Address; buy: boolean }
   | KeyNotice & { kind: 'key-received'; creator: Address; from: Address }
-type Cursor = { block: bigint; log: number }
-type Page = { items: KeyNotification[]; next: Cursor | null; truncated: boolean }
+
+type Page = { items: KeyNotification[]; next: KeyPosition | null; truncated: boolean }
 export const keyNoticeId = (n: KeyNotification) => `${n.kind === 'key-trade' ? 'trade' : 'received'}/${n.chain.id}/${n.block}/${n.log}`
 /** The other account in a notice, the trader or the sender: mutes apply to it. */
 export const keyNoticeParty = (n: KeyNotification): Address => n.kind === 'key-trade' ? n.trader : n.from
-const positionBefore = (a: Cursor, b: Cursor) => a.block < b.block || (a.block === b.block && a.log < b.log)
-function cursor(value: unknown): Cursor {
-  const v = value as { block?: unknown; log?: unknown }
-  if (!v || typeof v.block !== 'string' || !/^(0|[1-9][0-9]{0,19})$/.test(v.block)
-    || typeof v.log !== 'number' || !Number.isInteger(v.log) || v.log < 0 || v.log > 0xffff_ffff) throw Error('invalid key trade position')
-  const block = integer(v.block)
-  if (block > 0xffff_ffff_ffff_ffffn) throw Error('invalid key trade position')
-  return { block, log: v.log }
-}
 /** `account`'s key inbox. Only an account with active keys has trades; any account can receive keys. */
 export async function readKeyNotifications(chain: ChainInfo, market: Address, account: Address,
-  before: Cursor | null = null, limit = 100): Promise<Page> {
+  before: KeyPosition | null = null, limit = 100): Promise<Page> {
   const params = new URLSearchParams({ limit: String(limit) })
   if (before) { params.set('before_block', String(before.block)); params.set('before_log', String(before.log)) }
   const r = await request<any>(chain, `keyring/${account}/trades?${params}`)
   if (!r || typeof r.market !== 'string' || !sameAddress(r.market, market) || typeof r.active !== 'boolean'
     || typeof r.truncated !== 'boolean' || !Array.isArray(r.items) || r.items.length > limit) throw Error('invalid key trade response')
-  const checkpoint = cursor({ block: r.checkpoint?.block, log: 0 })
+  const checkpoint = keyPosition({ block: r.checkpoint?.block, log: 0 }, 'trade')
   let previous = before
   const items: KeyNotification[] = r.items.map((n: any): KeyNotification => {
-    const p = cursor(n.position)
+    const p = keyPosition(n.position, 'trade')
     if (!Number.isInteger(n.amount) || n.amount < 1 || n.amount > 0xffff_ffff
       || !Number.isInteger(n.timestamp) || n.timestamp < 0 || n.timestamp > 0xffff_ffff
       || typeof n.transaction !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(n.transaction)
-      || p.block > checkpoint.block || (previous && !positionBefore(p, previous))) throw Error('invalid key trade notification')
+      || p.block > checkpoint.block || (previous && newerPosition(p, previous) <= 0)) throw Error('invalid key trade notification')
     previous = p
     const shared = { chain, amount: n.amount, timestamp: n.timestamp, transaction: n.transaction as Hex, ...p }
     if (n.kind === 'received') {
@@ -52,7 +44,7 @@ export async function readKeyNotifications(chain: ChainInfo, market: Address, ac
       || typeof n.buy !== 'boolean') throw Error('invalid key trade notification')
     return { kind: 'key-trade', trader: getAddress(n.trader), buy: n.buy, ...shared }
   })
-  const next = r.next === null ? null : cursor(r.next)
+  const next = r.next === null ? null : keyPosition(r.next, 'trade')
   if (next && (items.length !== limit || !previous || next.block !== previous.block || next.log !== previous.log)) throw Error('invalid key trade cursor')
   return { items, next, truncated: r.truncated }
 }
@@ -62,7 +54,7 @@ export class KeyNotifications {
   private items = $state.raw<KeyNotification[]>([])
   private polled = $state<{ version: number; head: string | null } | null>(null)
   private version = 0
-  private next: Cursor | null = null
+  private next: KeyPosition | null = null
   private loaded = false
   private truncated = false
   private refresh: unknown

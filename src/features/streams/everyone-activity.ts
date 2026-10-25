@@ -1,6 +1,7 @@
+import { newerPosition } from '../keys/key-position'
 import type { Page } from './feed'
 import type { ConversationRowData } from './conversation'
-import { KeyActivityFeed, keyActivityId, newerPosition, type KeyActivity } from '../keys/key-activity'
+import { KeyActivityFeed, keyActivityId, type KeyActivity } from '../keys/key-activity'
 import type { Address } from 'viem'
 import type { ChainInfo } from '../../lib/types'
 import { SerialQueue } from '../../shared/serial-queue'

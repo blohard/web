@@ -1,27 +1,19 @@
 // Public activations, purchases and transfers. The host replays these from its accepted
 // key-market journal; this path never asks a wallet or a chain RPC.
 import { getAddress, isAddress, type Address, type Hex } from 'viem'
-import { integer, request } from '../../lib/api'
+import { request } from '../../lib/api'
 import { sameAddress } from '../../lib/format'
 import { muted } from '../../lib/muted.svelte'
 import { host } from '../../lib/host.svelte'
 import type { ChainInfo } from '../../lib/types'
 
-export type KeyPosition = { block: bigint; log: number }
+import { keyPosition, newerPosition, type KeyPosition } from './key-position'
 export type KeyActivity = KeyPosition & {
   creator: Address; amount: number; timestamp: number; transaction: Hex
 } & ({ kind: 'activation' } | { kind: 'purchase'; buyer: Address } | { kind: 'transfer'; from: Address; to: Address })
 export const keyActivityId = (e: KeyActivity) => `key/${e.block}/${e.log}`
 export const keyActivityAccounts = (e: KeyActivity) => e.kind === 'activation' ? [e.creator] : e.kind === 'purchase' ? [e.creator, e.buyer] : [e.creator, e.from, e.to]
 export const visibleKeyActivity = (e: KeyActivity) => !keyActivityAccounts(e).some(a => muted.has(a) || host.blocked(a))
-export const newerPosition = (a: KeyPosition, b: KeyPosition) => a.block === b.block ? b.log - a.log : a.block > b.block ? -1 : 1
-function position(v: any): KeyPosition {
-  if (!v || typeof v.block !== 'string' || !/^(0|[1-9][0-9]{0,19})$/.test(v.block)
-    || !Number.isInteger(v.log) || v.log < 0 || v.log > 0xffff_ffff) throw Error('invalid key activity position')
-  const block = integer(v.block)
-  if (block > 0xffff_ffff_ffff_ffffn) throw Error('invalid key activity position')
-  return { block, log: v.log }
-}
 function address(v: unknown): Address {
   if (typeof v !== 'string' || !isAddress(v, { strict: false })) throw Error('invalid key activity account')
   return getAddress(v)
@@ -32,10 +24,10 @@ export async function readKeyActivity(chain: ChainInfo, market: Address, before:
   const r = await request<any>(chain, `keyring/activity?${params}`)
   if (!r || typeof r.market !== 'string' || !sameAddress(r.market, market)
     || !Array.isArray(r.items) || r.items.length > limit) throw Error('invalid key activity response')
-  const checkpoint = position({ block: r.checkpoint?.block, log: 0 })
+  const checkpoint = keyPosition({ block: r.checkpoint?.block, log: 0 }, 'activity')
   let previous = before
   const items = r.items.map((n: any): KeyActivity => {
-    const p = position(n.position), e = n.event
+    const p = keyPosition(n.position, 'activity'), e = n.event
     if (!e || !Number.isInteger(e.amount) || e.amount < (e.kind === 'activated' ? 0 : 1) || e.amount > 0xffff_ffff
       || !Number.isInteger(n.timestamp) || n.timestamp < 0 || n.timestamp > 0xffff_ffff
       || typeof n.transaction !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(n.transaction)
@@ -51,7 +43,7 @@ export async function readKeyActivity(chain: ChainInfo, market: Address, before:
     }
     throw Error('invalid key activity event')
   })
-  const next = r.next === null ? null : position(r.next)
+  const next = r.next === null ? null : keyPosition(r.next, 'activity')
   // Filtering can advance past hidden events and can return an empty page.
   if (next && (next.block > checkpoint.block || (before && newerPosition(next, before) <= 0)
     || (previous && newerPosition(next, previous) < 0))) throw Error('invalid key activity cursor')
