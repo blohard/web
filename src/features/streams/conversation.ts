@@ -192,9 +192,9 @@ export function prepareRow(filter: Filter, lead: Posted, source: RowSource, {
     const parent = source.parents.get(reply.parentId)
     if (parent && parent.id !== id) cardsById.set(parent.id, parent)
   }
-  // Only the selected replies add context, not the parents just added here.
-  const selected = [...cardsById.values()]
-  const cards = curated ? branchOrder(selected) : selected.sort(oldestFirst)
+  // Order the preview and its context together for display.
+  const displayed = [...cardsById.values()]
+  const cards = curated ? branchOrder(displayed) : displayed.sort(oldestFirst)
   return {
     kind: 'pair', depthFirst: curated, key, lead, previewAfter,
     previewIds: new Set(preview.map(p => p.id)),

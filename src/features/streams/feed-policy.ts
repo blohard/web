@@ -22,6 +22,10 @@ export type PostSelection = 'selected' | 'excluded' | 'waiting-for-parent'
 /** Muted authors are left out of streams, not of a profile deliberately opened. */
 export const appliesMutes = (filter: Filter): boolean => filter.kind !== 'author' && filter.kind !== 'author-replies'
 
+/** Filtered home streams connect replies only through other selected records. */
+export const groupsSelectedOnly = (filter: Filter): boolean =>
+  filter.kind === 'following' || (filter.kind === 'timeline' && filter.curatedOnly === true)
+
 const viewerWrote = (filter: Filter, post: Posted): boolean =>
   filter.viewer !== undefined && sameAddress(filter.viewer, post.author)
 

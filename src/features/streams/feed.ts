@@ -1,15 +1,16 @@
 // Feed retrieval owns pagination, retained snapshots and recovery. Selection
 // rules live in feed-policy.ts; conversation.ts prepares their cards and context.
+import { selectConversations } from './feed-selection'
 import { listening, QuietChanges, type Listener } from './quiet-changes'
 import { SerialQueue } from '../../shared/serial-queue'
 import { SvelteMap } from 'svelte/reactivity'
 import * as api from '../../lib/api'
 import { endingOf, newestFirst, oldestFirst } from '../../lib/board'
 import { ancestorsOf, readMessage, rememberMessages } from '../../lib/messages'
-import { CONTEXT_DEPTH, groupProfileReplies, prepareRow, rowKey, withInlined, type Groups, type ConversationRowData } from './conversation'
+import { CONTEXT_DEPTH, groupProfileReplies, prepareRow, rowKey, type ConversationRowData } from './conversation'
 import { gates as ledger } from '../../lib/gates.svelte'
 import { sameAddress } from '../../lib/format'
-import { appliesMutes, curatedSubjects, feedQuery, selectPost, type Filter } from './feed-policy'
+import { appliesMutes, groupsSelectedOnly, curatedSubjects, feedQuery, selectPost, type Filter } from './feed-policy'
 import { host } from '../../lib/host.svelte'
 import { readHostPolicy } from '../../lib/host-policy'
 import { muted } from '../../lib/muted.svelte'
@@ -212,57 +213,14 @@ async function select(f: Filter, v: View, chain: ChainInfo, preservePreviews = f
   const context = await threadContext(chain, byId, profileReplies ? v.replies : v.inlined, profileReplies)
   for (const c of context) byId.set(c.id, c)
   const all = [...byId.values()]
-  const muting = appliesMutes(f)
-  const selectedOnly = f.kind === 'following' || (f.kind === 'timeline' && f.curatedOnly === true)
-  const unmuted = muting ? all.filter((p) => !muted.has(p.author)) : all
-  // Context connects selected replies; it cannot keep a row alive by itself.
-  const kept = new Set(unmuted.filter((p) => (!selectedOnly || v.held.has(p.id))
-    && !endingOf(ledger.message(chain, p.id))).map((p) => p.id))
-  // Filtered home streams group only selected records. prepareRow adds their
-  // immediate parent context without bridging to a distant selected ancestor.
-  if (!selectedOnly) for (const id of [...kept]) {
-    let parent = byId.get(id)?.parentId
-    while (parent !== undefined && byId.has(parent) && !kept.has(parent)) {
-      kept.add(parent)
-      parent = byId.get(parent)?.parentId
-    }
-  }
-  const top = v.top.filter((p) => kept.has(p.id))
-  const inlined = [...v.inlined, ...context].filter((p) => kept.has(p.id))
-  const replies = v.replies.filter((p) => kept.has(p.id))
-  let posts: Posted[]
-  let chains = new Map<bigint, Posted[]>()
-  let groups: Groups = new Map()
-  let activity = new Map<bigint, Posted>()
-  switch (f.kind) {
-    case 'timeline':
-    case 'following':
-    case 'author': {
-      // Muting and deletion were applied above; a muted or deleted post left
-      // in `top` is the context above a shown reply, and the pair shows it.
-      const merged = withInlined(top, inlined)
-      posts = merged.posts
-      chains = merged.chains
-      groups = merged.groups
-      activity = merged.activity
-      break
-    }
-    case 'author-replies': {
-      // The author's replies as listed; the reader's answers hang beneath the reply they answer.
-      posts = replies.filter((r) => sameAddress(r.author, f.address))
-      for (const r of replies) {
-        if (sameAddress(r.author, f.address)) continue
-        chains.set(r.parentId, [...(chains.get(r.parentId) ?? []), r].sort(oldestFirst))
-      }
-      break
-    }
-  }
-  const ended = new Set(all.filter((p) => endingOf(ledger.message(chain, p.id))).map((p) => p.id))
+  const selectedOnly = groupsSelectedOnly(f)
+  const ended = new Set(all.filter(p => endingOf(ledger.message(chain, p.id))).map(p => p.id))
+  const eligibleIds = new Set(all.filter(p => (!appliesMutes(f) || !muted.has(p.author))
+    && (!selectedOnly || v.held.has(p.id)) && !ended.has(p.id)).map(p => p.id))
+  const { posts, activity, source } = selectConversations(f, {
+    top: v.top, inlined: v.inlined, replies: v.replies, context, parents: byId, eligibleIds, ended,
+  })
   const homeStream = f.kind === 'timeline' || f.kind === 'following'
-  const selected = homeStream
-    ? new Set([...top, ...v.inlined].filter(p => kept.has(p.id) && !muted.has(p.author) && !endingOf(ledger.message(chain, p.id))).map(p => p.id))
-    : undefined
-  const source = { chains, groups, parents: byId, ended, selected }
   // The curated tab's membership is the host's: its pages and changes carry
   // only listed authors' posts and replies, the reader's replies to listed
   // authors, and direct replies to the reader when they are listed.
