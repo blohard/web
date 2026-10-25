@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { after, beforeEach, test } from 'node:test'
 import { keccak256 } from 'viem'
-import { load, mock, install, teardown, hash } from './harness.mjs'
+import { load, mock, install, teardown, hash, deferred } from './harness.mjs'
 
 const { loadBody } = await load('lib/content.ts')
 beforeEach(install)
@@ -61,4 +61,27 @@ test('a kept body is asked for again after five minutes, so a takedown reaches l
     assert.equal((await loadBody(digest, anchor)).kind, 'taken-down')
     assert.equal(contentReads(), 2)
   } finally { Date.now = now }
+})
+
+
+test('body eviction bounds retained answers without losing an outstanding read', async () => {
+  const anchor = { chainId: mock.chain.id, messageId: 1n }
+  const add = i => {
+    const bytes = new TextEncoder().encode(`version/1 text/plain\nbounded body ${i}`)
+    const digest = keccak256(bytes); mock.bodies.set(digest, bytes); return digest
+  }
+  const started = deferred(), release = deferred(), pendingHash = add('pending')
+  mock.onContent = async url => { if (url.includes(pendingHash)) { started.resolve(); await release.promise } }
+  const pending = loadBody(pendingHash, anchor)
+  await started.promise
+  try {
+    const oldest = add(0)
+    const retained = await loadBody(oldest, anchor)
+    for (let i = 1; i <= 512; i++) await loadBody(add(i), anchor)
+    assert.equal(loadBody(pendingHash, anchor), pending, 'eviction must not lose an in-flight share')
+    const reads = contentReads()
+    assert.equal((await loadBody(oldest, anchor)).kind, 'text')
+    assert.equal(contentReads(), reads + 1, 'the oldest completed body was evicted')
+    assert.equal(retained.text, 'bounded body 0', 'existing cards retain their body')
+  } finally { release.resolve(); await pending }
 })

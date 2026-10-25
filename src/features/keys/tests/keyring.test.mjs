@@ -186,3 +186,16 @@ for (const selected of [true, false]) test(`startup fills the keyring ${selected
   await tick()
   assert.equal(calls, 1, 'later background polls still pause')
 })
+
+
+test('keyring reads evict the oldest completed answer after 512 accounts', async () => {
+  forgetKeyrings()
+  let calls = 0
+  globalThis.fetch = async () => { calls++; return Response.json({ market, truncated: { holders: false, holding: false }, active: true, holders: [], holding: [] }) }
+  const account = i => `0x${i.toString(16).padStart(40, '0')}`
+  for (let i = 1; i <= 513; i++) await sharedKeyring(mock.chain, account(i), market)
+  await sharedKeyring(mock.chain, account(513), market)
+  assert.equal(calls, 513)
+  await sharedKeyring(mock.chain, account(1), market)
+  assert.equal(calls, 514, 'the oldest completed read was evicted')
+})

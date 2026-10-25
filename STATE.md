@@ -274,6 +274,19 @@ The timeout uses no animation frame or resize observer; background browser
 throttling can still delay timers. Slow reads or image decoding can finish after
 the bounded wait; later name, quote and clipping updates can still change layout.
 
+## Recent body and keyring reads
+
+Bodies and keyring reads each retain up to 512 completed answers, least recently
+used first. Bodies expire five minutes after their read starts; keyrings expire
+after one minute. Insertion also discards expired answers. Eviction affects
+future reads only: mounted views retain their answers and never refetch just
+because an entry was evicted. These are entry bounds, not byte or concurrency
+limits; in-flight reads are shared separately and are not evicted.
+
+A failed read is not cached. Missing, taken-down and mismatched bodies are not
+cached either. Explicit keyring refreshes replace the shared read, and invalidation
+forgets it; a superseded completion cannot overwrite or remove the newer answer.
+
 ## Avatar ownership
 
 `lib/avatars.ts` shares downloads and caches blobs by account and source URL.
