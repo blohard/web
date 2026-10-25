@@ -16,7 +16,6 @@ const pending = await load('features/publishing/pending.ts')
 const { bodyRecord } = await load('features/publishing/posting.ts')
 const { gating } = await load('features/messages/gating.svelte.ts')
 const { boardAbi } = await load('lib/abi/board.ts')
-const { avatars } = await load('lib/avatars.svelte.ts')
 const { Wallet } = await load('lib/wallet.svelte.ts')
 const originalFetch = globalThis.fetch
 const originalIndexedDB = globalThis.indexedDB
@@ -143,11 +142,6 @@ export function bigBody(total) {
   }, { highWaterMark: 0 }) // hand out a piece only when read, so the count is what the reader took
   return { stream, state }
 }
-export const settled = async (who, url) => {
-  for (let i = 0; i < 200 && avatars.get(who, url) === undefined; i++) await new Promise((r) => setTimeout(r, 5))
-  return avatars.get(who, url)
-}
-
 /** A post for the feed fixtures; `parentAuthor` is filled in by `feedHistory` from the list when the parent is in it. */
 export function feedPost(id, parentId = 0, who = author, parentAuthor) {
   return { id: BigInt(id), parentId: BigInt(parentId), author: who, parentAuthor, contentHash: hash('66'),

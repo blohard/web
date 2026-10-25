@@ -6,7 +6,6 @@
 // while it streams, and SVG is refused: as an image its scripts are inert, but
 // a blob URL of ours opened as a document would run them as this origin.
 import { sharedRead } from '../shared/shared-read'
-import { SvelteMap } from 'svelte/reactivity'
 import { responseBytes, ResponseTooLarge } from '../shared/response-bytes.ts'
 import { STORES, across, tx } from './db'
 
@@ -26,15 +25,14 @@ const showable = (type: string) => {
   return bare.startsWith('image/') && bare !== 'image/svg+xml'
 }
 
+/** null permits the original URL as a fallback; false refuses the image. */
+type Picture = Blob | null | false
+type Entry = { picture: Picture; at: number }
+const fresh = (entry: Entry) => Date.now() - entry.at < (entry.picture instanceof Blob ? TTL : NEGATIVE_TTL)
+
 export class Avatars {
-  /**
-   * Object URLs by address and source URL. `null`: the fetch failed (the tag may still try the URL itself);
-   * `false`: refused for what it is, so the identicon shows instead.
-   */
-  ready = new SvelteMap<string, string | null | false>()
-  private inflight = new Map<string, Promise<void>>()
-  /** When each failed or refused answer arrived. */
-  private failedAt = new Map<string, number>()
+  private ready = new Map<string, Entry>()
+  private inflight = new Map<string, Promise<Picture>>()
   /** The one sweep of expired entries, made the first time the cache is read in this page. */
   private pruned: Promise<void> | undefined
 
@@ -52,40 +50,39 @@ export class Avatars {
     return this.pruned
   }
 
-  /** An object URL for the cached image, `null` if fetching failed, `false` if refused, `undefined` while working. */
-  get(address: string, url: string): string | null | false | undefined {
+  /** Share blobs, never object URLs. Each mounted avatar owns its URL's lifetime. */
+  read(address: string, url: string): Promise<Picture> {
     const k = JSON.stringify([address.toLowerCase(), url])
     const known = this.ready.get(k)
-    if (this.ready.has(k) && (known || Date.now() - (this.failedAt.get(k) ?? 0) < NEGATIVE_TTL)) return known
-    // An expired failure keeps showing until the new answer replaces it.
-    void sharedRead(this.inflight, k, () => this.load(k, address.toLowerCase(), url))
-    return known
+    if (known && fresh(known)) {
+      return Promise.resolve(known.picture)
+    }
+    this.ready.delete(k)
+    return sharedRead(this.inflight, k, async () => {
+      const entry = await this.load(address.toLowerCase(), url)
+      this.ready.set(k, entry)
+      return entry.picture
+    })
   }
 
-  private failed(k: string, value: null | false) {
-    this.failedAt.set(k, Date.now())
-    this.ready.set(k, value)
-  }
-
-  private async load(k: string, address: string, url: string) {
+  private async load(address: string, url: string): Promise<Entry> {
     try {
       await this.prune()
       const hit = await tx<Cached | undefined>(STORES.avatars, 'readonly', (s) => s.get(address) as IDBRequest<Cached | undefined>).catch(() => undefined)
       if (hit && hit.url === url && Date.now() - hit.fetchedAt < TTL && showable(hit.blob.type) && hit.blob.size <= MAX_BYTES) {
-        this.ready.set(k, URL.createObjectURL(hit.blob))
-        return
+        return { picture: hit.blob, at: hit.fetchedAt }
       }
       const blob = await download(url)
       if (blob === REFUSED) {
-        this.failed(k, REFUSED)
-        return
+        return { picture: REFUSED, at: Date.now() }
       }
+      const at = Date.now()
       await tx(STORES.avatars, 'readwrite', (s) => {
-        s.put({ address, url, blob, fetchedAt: Date.now() } satisfies Cached)
+        s.put({ address, url, blob, fetchedAt: at } satisfies Cached)
       }).catch(() => {})
-      this.ready.set(k, URL.createObjectURL(blob))
+      return { picture: blob, at }
     } catch {
-      this.failed(k, null)
+      return { picture: null, at: Date.now() }
     }
   }
 }

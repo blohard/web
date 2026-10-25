@@ -1,10 +1,11 @@
 // Untrusted avatar bytes are bounded before display, including cached types.
 import assert from 'node:assert/strict'
 import { after, beforeEach, test } from 'node:test'
-import { load, install, teardown, address, bigBody, settled } from './harness.mjs'
-const { avatars, Avatars } = await load('lib/avatars.svelte.ts')
+import { load, install, teardown, address, bigBody } from './harness.mjs'
+const { Avatars } = await load('lib/avatars.ts')
 const { tx, STORES } = await load('lib/db.ts')
-beforeEach(install)
+let avatars
+beforeEach(() => { install(); avatars = new Avatars() })
 after(teardown)
 
 test('a changed avatar URL has its own flight and an old completion cannot replace it', async () => {
@@ -17,13 +18,13 @@ test('a changed avatar URL has its own flight and an old completion cannot repla
     if (url === old) { started(); await new Promise((r) => { release = r }) }
     return new Response(url, { headers: { 'content-type': 'image/png' } })
   }
-  avatars.get(who, old); await waiting
-  const latest = await settled(who, current)
-  assert.match(latest, /^blob:/)
+  const pending = avatars.read(who, old); await waiting
+  const latest = await avatars.read(who, current)
+  assert.equal(await latest.text(), current)
   release()
-  const previous = await settled(who, old)
+  const previous = await pending
   assert.notEqual(previous, latest)
-  assert.equal(avatars.get(who, current), latest)
+  assert.equal(await avatars.read(who, current), latest)
   assert.deepEqual(calls, [old, current])
   assert.deepEqual(referrers, ['no-referrer', 'no-referrer'], 'the owner\'s server is not told where the reader came from')
 })
@@ -36,35 +37,29 @@ test('an avatar over the size limit is refused without being downloaded, and sho
   }
   // An honest length: refused before a byte is read.
   const honest = bigBody(2 << 20); bodies['https://pics.invalid/honest'] = { stream: honest.stream, length: 2 << 20 }
-  assert.equal(avatars.get(address('a1'), 'https://pics.invalid/honest'), undefined)
-  assert.equal(await settled(address('a1'), 'https://pics.invalid/honest'), false)
+  assert.equal(await avatars.read(address('a1'), 'https://pics.invalid/honest'), false)
   assert.equal(honest.state.pulled, 0)
   // No length: read until the limit, then cancelled, well short of the whole body.
   const sneaky = bigBody(2 << 20); bodies['https://pics.invalid/sneaky'] = { stream: sneaky.stream }
-  avatars.get(address('a2'), 'https://pics.invalid/sneaky')
-  assert.equal(await settled(address('a2'), 'https://pics.invalid/sneaky'), false)
+  assert.equal(await avatars.read(address('a2'), 'https://pics.invalid/sneaky'), false)
   assert.ok(sneaky.state.pulled <= (1 << 20) + (1 << 16), `read ${sneaky.state.pulled} bytes`)
   assert.equal(sneaky.state.cancelled, true)
   // A small picture is kept.
   const small = bigBody(1000); bodies['https://pics.invalid/small'] = { stream: small.stream, length: 1000 }
-  avatars.get(address('a3'), 'https://pics.invalid/small')
-  assert.match(await settled(address('a3'), 'https://pics.invalid/small'), /^blob:/)
+  assert.equal((await avatars.read(address('a3'), 'https://pics.invalid/small')).size, 1000)
 })
 
 test('an SVG avatar is refused, fresh or cached', async () => {
   globalThis.fetch = async () => new Response('<svg xmlns="http://www.w3.org/2000/svg"/>', { headers: { 'content-type': 'image/svg+xml' } })
-  avatars.get(address('a4'), 'https://pics.invalid/vector.svg')
-  assert.equal(await settled(address('a4'), 'https://pics.invalid/vector.svg'), false)
+  assert.equal(await avatars.read(address('a4'), 'https://pics.invalid/vector.svg'), false)
   // A cached SVG from before the rule is not shown either.
   const who = address('a5')
   await tx(STORES.avatars, 'readwrite', (s) => s.put({ address: who, url: 'https://pics.invalid/old.svg', blob: new Blob(['<svg/>'], { type: 'image/svg+xml' }), fetchedAt: Date.now() }))
-  avatars.get(who, 'https://pics.invalid/old.svg')
-  assert.equal(await settled(who, 'https://pics.invalid/old.svg'), false)
+  assert.equal(await avatars.read(who, 'https://pics.invalid/old.svg'), false)
   // Nor one whose cached type carries a parameter, as earlier code could store it.
   const charset = address('a6')
   await tx(STORES.avatars, 'readwrite', (s) => s.put({ address: charset, url: 'https://pics.invalid/old2.svg', blob: new Blob(['<svg/>'], { type: 'image/svg+xml;charset=utf-8' }), fetchedAt: Date.now() }))
-  avatars.get(charset, 'https://pics.invalid/old2.svg')
-  assert.equal(await settled(charset, 'https://pics.invalid/old2.svg'), false)
+  assert.equal(await avatars.read(charset, 'https://pics.invalid/old2.svg'), false)
 })
 
 test('a failed avatar is asked about again after an hour, not kept for the life of the tab', async (t) => {
@@ -76,19 +71,16 @@ test('a failed avatar is asked about again after an hour, not kept for the life 
     if (down) throw new TypeError('network blip')
     return new Response('png', { headers: { 'content-type': 'image/png' } })
   }
-  assert.equal(await settled(who, url), null)
+  assert.equal(await avatars.read(who, url), null)
   assert.equal(calls, 1)
   down = false
   t.mock.timers.tick(60 * 60_000 - 1)
-  assert.equal(avatars.get(who, url), null)
+  assert.equal(await avatars.read(who, url), null)
   await new Promise(setImmediate)
   assert.equal(calls, 1, 'kept for the hour')
   t.mock.timers.tick(1)
-  assert.equal(avatars.get(who, url), null, 'the last answer shows while asking again')
-  for (let i = 0; i < 20 && calls < 2; i++) await new Promise(setImmediate)
+  assert.ok(await avatars.read(who, url) instanceof Blob)
   assert.equal(calls, 2)
-  for (let i = 0; i < 50 && !avatars.get(who, url); i++) await new Promise(setImmediate)
-  assert.match(avatars.get(who, url), /^blob:/)
 })
 
 test('the cache keeps a week of reading: expired entries are dropped the first time it is used', async () => {
@@ -102,9 +94,55 @@ test('the cache keeps a week of reading: expired entries are dropped the first t
   const calls = []
   globalThis.fetch = async (url) => { calls.push(url); return new Response('png', { headers: { 'content-type': 'image/png' } }) }
   const cache = new Avatars()
-  for (let i = 0; i < 200 && cache.get(fresh, freshUrl) === undefined; i++) await new Promise((r) => setTimeout(r, 5))
-  assert.match(cache.get(fresh, freshUrl), /^blob:/, 'the fresh entry is served from the cache')
+  assert.ok(await cache.read(fresh, freshUrl) instanceof Blob, 'the fresh entry is served from disk')
   assert.deepEqual(calls, [], 'without a fetch')
   const kept = await tx(STORES.avatars, 'readonly', (s) => s.getAllKeys())
   assert.deepEqual(kept, [fresh], 'the expired entry is gone')
+})
+
+test('mounted readers share one download and receive the same blob without creating URLs', async (t) => {
+  t.mock.method(URL, 'createObjectURL', () => { throw Error('the cache must not own object URLs') })
+  let calls = 0, release
+  const wait = new Promise(resolve => { release = resolve })
+  globalThis.fetch = async () => { calls++; await wait; return new Response('png', { headers: { 'content-type': 'image/png' } }) }
+  const who = address('b7'), url = 'https://pics.invalid/shared'
+  const first = avatars.read(who, url), second = avatars.read(who.toUpperCase(), url)
+  assert.equal(first, second, 'same pending read')
+  release()
+  const blob = await first
+  assert.ok(blob instanceof Blob)
+  assert.equal(await second, blob)
+  assert.equal(await avatars.read(who, url), blob)
+  assert.equal(calls, 1)
+})
+
+test('a disk hit keeps its original age in memory and expires after seven days', async (t) => {
+  const day = 24 * 60 * 60_000, now = 20 * day
+  t.mock.timers.enable({ apis: ['Date'], now })
+  const who = address('b8'), url = 'https://pics.invalid/aging'
+  await tx(STORES.avatars, 'readwrite', s => s.put({ address: who, url, blob: new Blob(['old'], { type: 'image/png' }), fetchedAt: now - 6 * day }))
+  let calls = 0
+  globalThis.fetch = async () => { calls++; return new Response('new', { headers: { 'content-type': 'image/png' } }) }
+  const old = await avatars.read(who, url)
+  assert.equal(await old.text(), 'old')
+  t.mock.timers.tick(day - 1)
+  assert.equal(await avatars.read(who, url), old)
+  assert.equal(calls, 0)
+  t.mock.timers.tick(1)
+  assert.equal(await (await avatars.read(who, url)).text(), 'new')
+  assert.equal(calls, 1)
+})
+
+test('refused images retry after an hour just like failures', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 400_000_000 })
+  let calls = 0
+  globalThis.fetch = async () => { calls++; return new Response('svg', { headers: { 'content-type': 'image/svg+xml' } }) }
+  const who = address('b9'), url = 'https://pics.invalid/refused'
+  assert.equal(await avatars.read(who, url), false)
+  t.mock.timers.tick(60 * 60_000 - 1)
+  assert.equal(await avatars.read(who, url), false)
+  assert.equal(calls, 1)
+  t.mock.timers.tick(1)
+  assert.equal(await avatars.read(who, url), false)
+  assert.equal(calls, 2)
 })

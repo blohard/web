@@ -3,21 +3,34 @@
   // verified name with one; otherwise a deterministic 5×5 identicon from the
   // address, so the same author is recognizable at a glance regardless.
   import { keccak256, stringToBytes } from 'viem'
-  import { avatars } from '../lib/avatars.svelte'
+  import { avatars } from '../lib/avatars'
   import { names } from '../lib/names.svelte'
 
   let { address, size = 36 }: { address: string; size?: number } = $props()
 
   let entry = $derived(names.lookup(address))
-  let cached = $derived(entry?.avatar ? avatars.get(address, entry.avatar) : undefined)
-  /** The cached copy when we have it; the URL itself if the fetch failed (the browser may still load it); nothing when refused. */
-  let src = $derived(entry?.avatar ? (cached === undefined || cached === false ? null : (cached ?? entry.avatar)) : null)
-  /**
-   * The picture URL that failed to load, if any; a different picture gets a
-   * fresh chance. Kept as plain state plus a derived on purpose: an `$effect`
-   * that reset a flag here (Svelte 5.57) left every card's page frozen — see
-   * "Runes" in the README.
-   */
+  const avatar = $derived(entry?.avatar)
+  const key = $derived(JSON.stringify([address.toLowerCase(), avatar]))
+  let picture = $state.raw<{ key: string; src: string | null } | null>(null)
+  let src = $derived(picture?.key === key ? picture.src : null)
+  $effect(() => {
+    const current = key, url = avatar, who = address
+    if (!url) return
+    let active = true, objectUrl: string | undefined
+    void avatars.read(who, url).then(blob => {
+      if (!active) return
+      if (blob instanceof Blob) objectUrl = URL.createObjectURL(blob)
+      // A failed CORS fetch may still work as an img; refused bytes never do.
+      picture = { key: current, src: objectUrl ?? (blob === null ? url : null) }
+    })
+    return () => {
+      active = false
+      picture = null
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  })
+  // Remember only the URL that failed. A replacement gets a fresh chance
+  // without effect-driven resets.
   let brokenSrc = $state<string | null>(null)
   let broken = $derived(src !== null && src === brokenSrc)
 

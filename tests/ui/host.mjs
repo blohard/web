@@ -8,6 +8,8 @@ export { deferred } from '../../scripts/fixture-values.mjs'
 export { expect }
 export const author = address('22')
 export const stranger = address('33')
+const avatarUrl = 'https://avatars.invalid/alice.png'
+const avatarPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=', 'base64')
 
 export const test = base.extend({
   host: async ({ page }, use) => {
@@ -57,7 +59,8 @@ export const test = base.extend({
         case '/api/relay/status': return response({ error: 'not configured' }, 404)
       }
       if (url.pathname.startsWith('/api/names/')) return response({
-        name: url.pathname.endsWith(author) ? 'alice.eth' : 'bob.eth', source: 'ens', avatar: null })
+        name: url.pathname.endsWith(author) ? 'alice.eth' : 'bob.eth', source: 'ens',
+        avatar: url.pathname.endsWith(author) ? avatarUrl : null })
       if (url.pathname.startsWith('/api/content/')) {
         const key = url.pathname.slice('/api/content/'.length)
         if (state.takedowns.hashes.includes(key)) return response({ error: 'this host has taken this content down', code: 'taken_down' }, 410)
@@ -73,6 +76,8 @@ export const test = base.extend({
       const request = route.request(), url = new URL(request.url())
       if (url.origin === 'http://127.0.0.1:8790' && !url.pathname.startsWith('/api/')) return route.continue()
       try {
+        if (url.href === avatarUrl) return route.fulfill({ contentType: 'image/png', body: avatarPng,
+          headers: { 'access-control-allow-origin': '*' } })
         if (url.origin !== 'http://127.0.0.1:8790') throw new Error(`external request: ${url}`)
         await fulfill(route, await answer(request))
       } catch (error) {

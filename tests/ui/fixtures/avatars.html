@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
+  <body>
+    <div id="first"></div><div id="second"></div>
+    <script type="module">
+      import { mount, unmount } from 'svelte'
+      import Avatar from '../../../src/components/Avatar.svelte'
+      import { names } from '../../../src/lib/names.svelte'
+      const instances = new Map()
+      window.avatarFixture = {
+        set(address, url) {
+          names.entries[address.toLowerCase()] = { name: 'avatar.eth', source: 'ens', avatar: url, checkedAt: Date.now() }
+        },
+        show(id, address) { instances.set(id, mount(Avatar, { target: document.getElementById(id), props: { address } })) },
+        async hide(id) { await unmount(instances.get(id)); instances.delete(id) },
+      }
+    </script>
+  </body>
+</html>
