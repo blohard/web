@@ -1,5 +1,6 @@
 // Local operator policy. The server verifies signed edits; wallet identity in
 // the UI only decides which controls to offer.
+import { sameAddress } from './format'
 import { isAddress, isHex, stringToHex, type Address, type Hex } from 'viem'
 import { host } from './host.svelte'
 import { requestPath, integer } from './api'
@@ -65,7 +66,7 @@ async function adminSigner(wallet: ActionWallet) {
   const pressed = captureWallet(wallet)
   if (!pressed) throw new Error('connect the host admin wallet')
   const policy = await readHostPolicy()
-  if (!policy || pressed.account.toLowerCase() !== policy.admin.toLowerCase()) throw new Error('only the host admin can make this change')
+  if (!policy || !sameAddress(pressed.account, policy.admin)) throw new Error('only the host admin can make this change')
   const chain = host.chain(policy.admin_chain)
   if (!chain) throw new Error('the host admin chain is unavailable')
   // A signature needs no wallet RPC; the chain is only what it is signed for.

@@ -1,3 +1,4 @@
+import { sameAddress } from '../../lib/format'
 import { getAddress, isAddress, zeroAddress, type Address } from 'viem'
 import { ApiError, requestPath } from '../../lib/api'
 
@@ -26,7 +27,7 @@ export async function resolveRecipient(input: string): Promise<{ name: string; a
     throw new Error('invalid recipient lookup')
   }
   if (answer.address === null) throw new Error('this name has no wallet address')
-  if (typeof answer.address !== 'string' || !isAddress(answer.address) || answer.address.toLowerCase() === zeroAddress) {
+  if (typeof answer.address !== 'string' || !isAddress(answer.address) || sameAddress(answer.address, zeroAddress)) {
     throw new Error('invalid recipient lookup')
   }
   return { name: answer.name, address: getAddress(answer.address) }

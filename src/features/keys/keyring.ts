@@ -1,3 +1,4 @@
+import { sameAddress } from '../../lib/format'
 import { getAddress, isAddress, type Address } from 'viem'
 import { request } from '../../lib/api'
 import type { ChainInfo } from '../../lib/types'
@@ -7,7 +8,7 @@ export type Keyring = { active: boolean; holders: Address[]; holding: Address[];
 export async function readKeyring(chain: ChainInfo, account: Address, market: Address): Promise<Keyring> {
   const result = await request<{ market: unknown; active: unknown; holders: unknown; holding: unknown; truncated: { holders: unknown; holding: unknown } }>(chain, `keyring/${account}`)
   if (typeof result.active !== 'boolean' || typeof result.market !== 'string'
-    || result.market.toLowerCase() !== market.toLowerCase()
+    || !sameAddress(result.market, market)
     || typeof result.truncated?.holders !== 'boolean' || typeof result.truncated?.holding !== 'boolean') throw new Error('invalid keyring response')
   function authors(value: unknown): Address[] {
     if (!Array.isArray(value) || value.length > 256 || value.some(a => typeof a !== 'string' || !isAddress(a))) {
@@ -15,7 +16,7 @@ export async function readKeyring(chain: ChainInfo, account: Address, market: Ad
     }
     const addresses = value.map(a => getAddress(a as string)).sort()
     if (new Set(addresses).size !== addresses.length) throw new Error('duplicate keyring authors')
-    return addresses.filter(a => a.toLowerCase() !== account.toLowerCase())
+    return addresses.filter(a => !sameAddress(a, account))
   }
   return { active: result.active, holders: authors(result.holders), holding: authors(result.holding), truncated: { holders: result.truncated.holders, holding: result.truncated.holding } }
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sameAddress } from '../../lib/format'
   // Curated membership, bot labels and host blocks share one local policy and
   // admin. One list per tab (design/BOT_LABELS.md); blocked is the admin's only.
   import { getAddress, isAddress, zeroAddress, type Address } from 'viem'
@@ -31,7 +32,7 @@
 
   function addresses(text: string): Address[] {
     const values = text.trim().split(/[\s,;]+/)
-    if (!values.length || values.length > 100 || values.some(a => !isAddress(a) || a.toLowerCase() === zeroAddress)) throw new Error('enter up to 100 wallet addresses')
+    if (!values.length || values.length > 100 || values.some(a => !isAddress(a) || sameAddress(a, zeroAddress))) throw new Error('enter up to 100 wallet addresses')
     return [...new Set(values.map(a => getAddress(a)))]
   }
   async function write(list: HostList, action: 'add' | 'remove') {

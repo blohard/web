@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sameAddress } from '../../lib/format'
   import Loading from '../../shared/Loading.svelte'
   import { loadingDelay } from '../../shared/loading-delay.svelte'
   // A profile: who someone is by address and name, the follow, mute and block
@@ -85,7 +86,7 @@
   let blockNote = $state<{ ok: boolean; text: string } | null>(null)
   // The host admin can label an account a bot from its profile (design/BOT_LABELS.md).
   let hostAdmin = $derived(!!host.status?.host_policy && wallet.is(host.status.host_policy.admin))
-  let labelledBot = $derived(host.status?.host_policy?.bots?.some(a => a.toLowerCase() === address.toLowerCase()) ?? false)
+  let labelledBot = $derived(host.status?.host_policy?.bots?.some(a => sameAddress(a, address)) ?? false)
   let botLabelBusy = $state(false)
   let botLabelNote = $state<{ ok: boolean; text: string } | null>(null)
   async function toggleBotLabel() {

@@ -2,6 +2,7 @@
 // Records from two histories are never combined: when the host reports a new
 // generation (a rebuilt index), this chain's cached records are dropped, and
 // an answer from the replaced one is refused (the gate ledger decides both).
+import { sameAddress } from './format'
 import { sharedRead } from '../shared/shared-read'
 import type { Hex } from 'viem'
 import { ApiError, integer, message, record, snapshots, type At, type RecordImage } from './api'
@@ -158,7 +159,7 @@ export async function resolveQuote(chain: ChainInfo, id: bigint, pin: Hex | unde
 /** Capture what the reader saw, only from a record accepted by the index. */
 export async function quoteOf(chain: ChainInfo, shown: MessageRef): Promise<Quote> {
   const r = await getMessage(chain, shown.id)
-  if (r.author.toLowerCase() !== shown.author.toLowerCase() || r.parentId !== shown.parentId || r.contentHash !== shown.contentHash) {
+  if (!sameAddress(r.author, shown.author) || r.parentId !== shown.parentId || r.contentHash !== shown.contentHash) {
     throw new Error('this post no longer matches the one shown; reload before quoting')
   }
   return { chainId: chain.id, id: r.id, commit: r.commitment }

@@ -1,4 +1,5 @@
 // Spending eligibility is separate from the host's curated membership list.
+import { sameAddress } from '../../lib/format'
 import { SvelteMap } from 'svelte/reactivity'
 import type { Address } from 'viem'
 import { host } from '../../lib/host.svelte'
@@ -27,7 +28,7 @@ class Sponsorship {
   private watchers = new Map<string, Set<() => void>>()
 
   policy(chain: ChainInfo) {
-    return host.relay?.chains.find((c) => c.id === chain.id && c.contract.toLowerCase() === chain.contract.toLowerCase())
+    return host.relay?.chains.find((c) => c.id === chain.id && sameAddress(c.contract, chain.contract))
   }
 
   lookup(chain: ChainInfo, address: Address): Entry | undefined {

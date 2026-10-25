@@ -1,3 +1,4 @@
+import { sameAddress } from '../../lib/format'
 import { getAddress, isAddress, type Address } from 'viem'
 import { request } from '../../lib/api'
 import type { ChainInfo } from '../../lib/types'
@@ -26,7 +27,7 @@ export async function readKeyringPage(chain: ChainInfo, account: Address, market
   }>(chain, `keyring/${account}/balances?${params}`)
   const quantity = (value: unknown, min: number): value is number =>
     typeof value === 'number' && Number.isInteger(value) && value >= min && value <= 0xffff_ffff
-  if (!result || typeof result.market !== 'string' || result.market.toLowerCase() !== market.toLowerCase()
+  if (!result || typeof result.market !== 'string' || !sameAddress(result.market, market)
     || result.view !== side || typeof result.active !== 'boolean' || !quantity(result.own_balance, 0)
     || typeof result.total !== 'number' || !Number.isSafeInteger(result.total) || result.total < 0
     || !Array.isArray(result.entries) || result.entries.length > limit || result.entries.length > result.total
@@ -38,7 +39,7 @@ export async function readKeyringPage(chain: ChainInfo, account: Address, market
   let previous = after?.toLowerCase() ?? ''
   const entries: KeyBalance[] = result.entries.map(entry => {
     if (!entry || typeof entry.address !== 'string' || !isAddress(entry.address, { strict: false })
-      || entry.address.toLowerCase() <= previous || entry.address.toLowerCase() === account.toLowerCase()
+      || entry.address.toLowerCase() <= previous || sameAddress(entry.address, account)
       || !quantity(entry.balance, 1)) throw new Error('invalid keyring balances')
     previous = entry.address.toLowerCase()
     return { address: getAddress(entry.address), balance: entry.balance }

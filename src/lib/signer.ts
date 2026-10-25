@@ -5,6 +5,7 @@
 // immediately before each signing request is forwarded, so an account that
 // moves while a gas estimate or a nonce is being awaited is still caught.
 // Best effort: the wallet is asked, and the chain remains the enforcement.
+import { sameAddress } from './format'
 import type { Address } from 'viem'
 import type { ChainInfo, Eip1193Provider } from './types'
 import { withTimeout } from '../shared/with-timeout'
@@ -20,7 +21,7 @@ export async function assertActive(provider: Eip1193Provider, account: Address):
     () => new Error('the wallet account check timed out. try again'))
   const active = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : null
   if (active === null) throw new Error('the wallet reports no connected account. unlock or reconnect it and try again')
-  if (active.toLowerCase() !== account.toLowerCase()) {
+  if (!sameAddress(active, account)) {
     throw new Error('the wallet is set to a different account than the one connected here. switch accounts in the wallet or reconnect')
   }
 }

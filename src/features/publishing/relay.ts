@@ -3,6 +3,7 @@
 // For a post, the author signs
 // the post instead of sending a transaction, and gets a transaction hash
 // back to treat exactly like their own (CLIENT.md).
+import { sameAddress } from '../../lib/format'
 import type { Address, Hex } from 'viem'
 import { sponsorName } from './sponsor-name'
 import { errorMessage, responseJson, retryAfter } from '../../shared/response-json'
@@ -141,7 +142,7 @@ export async function sponsorEligibility(chainId: number, address: Address, name
   const answer = await responseJson(res)
   if (!res.ok) throw new Error(errorMessage(res, answer))
   const a = answer as { address?: unknown; eligible?: unknown; reason?: unknown; posting_available?: unknown; posting_paused_reason?: unknown }
-  if (typeof a.address !== 'string' || a.address.toLowerCase() !== address.toLowerCase()
+  if (typeof a.address !== 'string' || !sameAddress(a.address, address)
     || typeof a.eligible !== 'boolean'
     || (a.eligible ? !['curated', 'ens', 'basename'].includes(String(a.reason)) : a.reason !== null)) {
     throw new Error('invalid sponsorship eligibility response')

@@ -1,5 +1,6 @@
 // The host's status (GET /api/status): read at startup until it answers, then
 // again while a gate it is configured with is still validating there.
+import { sameAddress } from './format'
 import { getStatus } from './store'
 import { host } from './host.svelte'
 import { mergePolicy } from './host-policy'
@@ -28,7 +29,7 @@ function adoptGates(shown: Status, fresh: Status): void {
   if (fresh.host_policy) shown.host_policy = mergePolicy(shown.host_policy, fresh.host_policy)
   else if (BigInt(shown.host_policy?.revision ?? 0) === 0n) shown.host_policy = null
   for (const chain of shown.chains) {
-    const update = fresh.chains.find((c) => c.id === chain.id && c.contract.toLowerCase() === chain.contract.toLowerCase())
+    const update = fresh.chains.find((c) => c.id === chain.id && sameAddress(c.contract, chain.contract))
     if (!update) continue
     chain.blocking = update.blocking ?? null
     chain.closed_gate = update.closed_gate ?? null
