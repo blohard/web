@@ -61,7 +61,7 @@ export function branchOrder(posts: Posted[]): Posted[] {
  * parent of an inlined reply is not repeated on its own: the pair shows it.
  * Several inlined replies to the same post form one group, represented in the
  * result by the newest of them. A conversation sits where its newest member
- * falls, on whichever branch; its preview draws that member too (replyPreview).
+ * falls, on whichever branch; its preview draws that member too (prepareRow).
  * Exported for the client tests; the page builder is the only other caller.
  */
 export function withInlined(
@@ -111,17 +111,10 @@ export function drawnReplies(cards: Posted[]): Map<bigint, number> {
   return drawn
 }
 
-/**
- * The cards a pair draws for one conversation: its newest selected replies
- * up to the supplied limit, whichever branch they are on, oldest first, so a reply always
- * comes after what it answers. No slot is kept for the reply answering the
- * pair's parent. prepareRow adds immediate parent context and preserves the
- * subject of a profile reply row.
- */
-export function replyPreview(page: { groups: Groups; chains: Map<bigint, Posted[]>; selected?: ReadonlySet<bigint> }, lead: Posted, limit = REPLY_PREVIEW): Posted[] {
+/** All loaded replies in a conversation, oldest first; prepareRow owns preview selection. */
+function conversationReplies(page: { groups: Groups; chains: Map<bigint, Posted[]> }, lead: Posted): Posted[] {
   const roots = lead.parentId === 0n ? [] : page.groups.get(lead.id) ?? [lead]
-  const all = roots.flatMap((r) => [r, ...(page.chains.get(r.id) ?? [])])
-  return all.filter(r => !page.selected || page.selected.has(r.id)).sort(newestFirst).slice(0, limit).sort(oldestFirst)
+  return roots.flatMap(r => [r, ...(page.chains.get(r.id) ?? [])]).sort(oldestFirst)
 }
 
 /** A new branch names its parent; consecutive siblings share that label. */
@@ -167,7 +160,7 @@ export function prepareRow(filter: Filter, lead: Posted, source: RowSource, {
   // reader's answers already ordered oldest first beneath it.
   const loaded = filter.kind === 'author-replies'
     ? [lead, ...(source.chains.get(lead.id) ?? []).slice(-(REPLY_PREVIEW - 1))]
-    : replyPreview({ ...source, selected: undefined }, lead, Infinity)
+    : conversationReplies(source, lead)
   const candidates = loaded.filter(p => !source.selected || source.selected.has(p.id))
   const automatic = candidates.filter(p => !previewAfter || isOpen(lead.parentId || lead.id) || newestFirst(p, previewAfter) < 0)
     .slice(curated ? 0 : -REPLY_PREVIEW)
@@ -235,7 +228,7 @@ export function groupProfileReplies(rows: ConversationRowData[], ended: Readonly
   const grouped = withInlined(posts.filter(p => p.parentId === 0n), posts.filter(p => p.parentId !== 0n))
   return grouped.posts.map(post => {
     let id = post.parentId || post.id
-    const cards = branchOrder(replyPreview(grouped, post, Infinity))
+    const cards = branchOrder(conversationReplies(grouped, post))
     // A bounded context path may stop before the actual root. Keep its first
     // loaded card as the root instead of requesting an extra ancestor.
     const root = records.get(id) ?? (missingRoots.has(id) ? undefined : cards.shift())

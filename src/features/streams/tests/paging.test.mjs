@@ -3,7 +3,7 @@ import { after, beforeEach, test } from 'node:test'
 import { load, mock, install, teardown, author, address, feedPost, feedHistory, counted, ids, curate, gateChanged } from '../../../../scripts/host-harness.mjs'
 
 const { loadFeed, olderFeed, resumeFeed, peekFeed, feedKey, FEED_PAGE_SIZE } = await load('features/streams/feed.ts')
-const { replyPreview, drawnReplies, gapsIn, rowKey, withInlined } = await load('features/streams/conversation.ts')
+const { prepareRow, drawnReplies, gapsIn, rowKey, withInlined } = await load('features/streams/conversation.ts')
 const { RowExpansion, expansionOf } = await load('features/streams/stream-expansion.ts')
 beforeEach(install)
 after(teardown)
@@ -103,7 +103,8 @@ test('the preview is the newest three replies across branches, oldest first, eve
   const root = feedPost(1)
   const replies = [feedPost(2, 1), feedPost(3, 2), feedPost(4, 2), feedPost(5, 3), feedPost(6, 5)]
   const grouped = withInlined([root], replies)
-  const cards = replyPreview(grouped, grouped.posts[0])
+  const row = prepareRow({ kind: 'timeline' }, grouped.posts[0], { ...grouped, parents: new Map(), ended: new Set() })
+  const cards = row.cards.map(c => c.post)
   assert.deepEqual(ids(cards), [4, 5, 6])
   assert.deepEqual([...gapsIn(1n, cards)], [4n, 5n], '4 answers 2 and 5 answers 3; 6 answers the card above it')
 })
@@ -113,7 +114,8 @@ test('no slot is kept for the reply answering the post when the newest cards are
   // Two branches beneath the post: 1 → 2 → 4 → 6 and 1 → 3 → 5 → 7.
   const replies = [feedPost(2, 1), feedPost(3, 1), feedPost(4, 2), feedPost(5, 3), feedPost(6, 4), feedPost(7, 5)]
   const grouped = withInlined([root], replies)
-  const cards = replyPreview(grouped, grouped.posts[0])
+  const row = prepareRow({ kind: 'timeline' }, grouped.posts[0], { ...grouped, parents: new Map(), ended: new Set() })
+  const cards = row.cards.map(c => c.post)
   assert.deepEqual(ids(cards), [5, 6, 7])
   assert.deepEqual([...gapsIn(1n, cards)], [5n, 6n, 7n], 'returning to another branch names its parent even when that parent is drawn')
   assert.deepEqual([...drawnReplies(cards)], [[3n, 1], [4n, 1], [5n, 1]])
@@ -124,7 +126,8 @@ test('siblings need no label when their parent is drawn higher up', () => {
   // 2 answers the post; 3 and then 4 both answer 2.
   const replies = [feedPost(2, 1), feedPost(3, 2), feedPost(4, 2)].map(post => ({ ...post, parentAuthor: author }))
   const grouped = withInlined([root], replies)
-  const cards = replyPreview(grouped, grouped.posts[0])
+  const row = prepareRow({ kind: 'timeline' }, grouped.posts[0], { ...grouped, parents: new Map(), ended: new Set() })
+  const cards = row.cards.map(c => c.post)
   assert.deepEqual(ids(cards), [2, 3, 4], 'three replies are shown whole')
   assert.deepEqual([...gapsIn(1n, cards)], [], 'both siblings answer the visible 2')
   assert.deepEqual([...drawnReplies(cards)], [[1n, 1], [2n, 2]], '2 has two drawn replies; the siblings have none')
@@ -135,7 +138,8 @@ test('the newest reply beneath an older direct reply is previewed and places the
   const replies = [...[10, 11, 12, 13, 14].map((i) => feedPost(i, 1)), feedPost(30, 10)]
   const grouped = withInlined([feedPost(1), feedPost(20)], replies)
   assert.deepEqual(ids(grouped.posts), [14, 20], 'the conversation ranks by its newest reply, above post 20')
-  const cards = replyPreview(grouped, grouped.posts[0])
+  const row = prepareRow({ kind: 'timeline' }, grouped.posts[0], { ...grouped, parents: new Map(), ended: new Set() })
+  const cards = row.cards.map(c => c.post)
   assert.deepEqual(ids(cards), [13, 14, 30])
   assert.deepEqual([...gapsIn(1n, cards)], [30n], 'only 30 answers a parent left out of the preview')
 })
