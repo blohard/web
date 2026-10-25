@@ -210,7 +210,7 @@ Neither policy would change the chain.
   reader moderates, except for protected responses. A reader's own reply to such a reply chains beneath it, so a
   conversation that hangs from the reader's post is one block with the post at its head. A
   shown reply carries its immediate parent as context, whoever wrote that parent.
-  Following and Keyring group through selected records only. An unselected parent supplies
+  Following, Keyring and Curated group through selected records only. An unselected parent supplies
   context for its selected replies, without bridging to or promoting an older selected ancestor.
   Several selected replies to one post form one group, so a busy post does not repeat itself
   down the feed. Curated selects the host's listed authors' posts and replies, plus the reader's

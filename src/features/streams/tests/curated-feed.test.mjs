@@ -96,3 +96,20 @@ for (const reader of ['curated', 'other curated', 'unlisted', 'anonymous']) test
   assert.deepEqual(drawn(await feed.loadFeed(mock.chain, personal)), visible)
   assert.equal(await feed.peekFeed(mock.chain, personal), 0)
 })
+
+for (const stream of ['Curated', 'Following', 'Keyring']) test(`${stream} does not promote an old post through unselected ancestors`, async () => {
+  const selected = stream === 'Curated' ? filter : {
+    kind: 'following', authors: [listed], viewer: author, includeRepliesToViewer: stream === 'Following',
+  }
+  const posts = [feedPost(1, 0, listed), feedPost(2, 1, stranger, listed),
+    feedPost(3, 2, stranger, stranger), feedPost(4, 0, listed)]
+  feedHistory(posts)
+  assert.deepEqual((await feed.loadFeed(mock.chain, selected)).rows.map(r => r.root.id), [4n, 1n])
+  feedHistory([...posts, feedPost(5, 3, listed, stranger), feedPost(6, 5, listed, listed)])
+  const page = await feed.loadFeed(mock.chain, selected)
+  assert.deepEqual(page.rows.map(r => r.root.id), [3n, 4n, 1n], 'the active branch moves up; the disconnected old post stays below the newer post')
+  assert.deepEqual(page.rows.map(r => r.activity.id), [6n, 4n, 1n], 'ranking uses the branch actually displayed')
+  assert.deepEqual(page.rows[0].cards.map(c => c.post.id), [5n, 6n])
+  assert.equal(page.rows[0].root.omitted, false, 'the immediate parent explains the active branch')
+  assert.deepEqual(page.rows[2].cards, [])
+})

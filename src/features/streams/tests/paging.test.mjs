@@ -240,11 +240,9 @@ test('curated shows every loaded qualifying reply, including earlier replies in 
   feedHistory([feedPost(23), feedPost(26, 23, outsider), feedPost(43, 23), feedPost(45, 26),
     feedPost(46, 45, outsider), feedPost(48, 46), feedPost(50, 43), feedPost(51, 23), feedPost(52, 23, outsider)])
   const page = await loadFeed(mock.chain, { kind: 'timeline', curatedOnly: true })
-  assert.equal(page.rows.length, 1)
-  const row = page.rows[0]
-  assert.equal(row.root.id, 23n)
-  assert.deepEqual(ids(row.cards.map(c => c.post)), [26, 45, 46, 48, 43, 50, 51],
-    'all curated replies remain, plus their immediate parent context, but not unrelated replies')
+  assert.deepEqual(page.rows.map(row => row.root.id), [23n, 46n, 26n])
+  assert.deepEqual(page.rows.map(row => ids(row.cards.map(c => c.post))), [[43, 50, 51], [48], [45]],
+    'all curated replies remain in their selected branches, with immediate parent context')
   assert.ok(!mock.calls.some(c => c.method === 'replies'), 'showing selected replies never expands a reply page')
 })
 
@@ -424,10 +422,10 @@ test('Everyone keeps immediate parent context for a recent nested reply', async 
 })
 
 
-for (const stream of ['curated', 'everyone']) test(`${stream} preserves an explicitly opened context card after its selected child folds`, async () => {
+test('Everyone preserves an explicitly opened context card after its selected child folds', async () => {
   curate([author])
   const other = address('88')
-  const filter = { kind: 'timeline', curatedOnly: stream === 'curated', viewer: author }
+  const filter = { kind: 'timeline', viewer: author }
   const history = [feedPost(1, 0, other), feedPost(2, 1, other), feedPost(3, 2)]
   feedHistory(history)
   const initial = await loadFeed(mock.chain, filter)
@@ -493,4 +491,23 @@ for (const includeRepliesToViewer of [false, true]) test(`${includeRepliesToView
   assert.equal(row.root.omitted, false)
   assert.equal(expansion.isOpen(2n), true)
   assert.deepEqual(ids(row.cards.map(c => c.post)), [3])
+})
+
+
+test('Curated keeps an opened context branch separate from a newer sibling branch', async () => {
+  curate([author])
+  const other = address('88'), filter = { kind: 'timeline', curatedOnly: true, viewer: author }
+  const history = [feedPost(1, 0, other), feedPost(2, 1, other), feedPost(3, 2)]
+  feedHistory(history)
+  const initial = await loadFeed(mock.chain, filter)
+  assert.equal(initial.rows[0].root.id, 2n)
+  assert.deepEqual(ids(initial.rows[0].cards.map(c => c.post)), [3])
+  const expansion = new RowExpansion(expansionOf(feedKey(mock.chain, filter)), 2n)
+  expansion.press(2n)
+  feedHistory([...history, feedPost(4), feedPost(5, 1)])
+  const refreshed = await loadFeed(mock.chain, filter)
+  assert.deepEqual(refreshed.rows.map(row => row.root.id), [1n, 4n, 2n])
+  assert.deepEqual(ids(refreshed.rows[0].cards.map(c => c.post)), [5])
+  assert.deepEqual(ids(refreshed.rows[2].cards.map(c => c.post)), [3])
+  assert.equal(expansion.isOpen(2n), true, 'the older branch retains its own expansion choice')
 })

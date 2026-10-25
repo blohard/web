@@ -218,9 +218,9 @@ async function select(f: Filter, v: View, chain: ChainInfo, preservePreviews = f
   // Context connects selected replies; it cannot keep a row alive by itself.
   const kept = new Set(unmuted.filter((p) => (!selectedOnly || v.held.has(p.id))
     && !endingOf(ledger.message(chain, p.id))).map((p) => p.id))
-  // Following and Keyring group only selected records. prepareRow adds their
+  // Filtered home streams group only selected records. prepareRow adds their
   // immediate parent context without bridging to a distant selected ancestor.
-  if (f.kind !== 'following') for (const id of [...kept]) {
+  if (!selectedOnly) for (const id of [...kept]) {
     let parent = byId.get(id)?.parentId
     while (parent !== undefined && byId.has(parent) && !kept.has(parent)) {
       kept.add(parent)
