@@ -7,7 +7,7 @@
 // Best effort: the wallet is asked, and the chain remains the enforcement.
 import type { Address } from 'viem'
 import type { ChainInfo, Eip1193Provider } from './types'
-import { withTimeout } from './wallet.svelte'
+import { withTimeout } from '../shared/with-timeout'
 
 const SIGNING = new Set([
   'eth_sendTransaction', 'wallet_sendTransaction', 'eth_signTransaction', 'eth_sign', 'personal_sign',

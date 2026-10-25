@@ -3,7 +3,7 @@ import { after, beforeEach, test } from 'node:test'
 import { hexToString } from 'viem'
 import { load, install, teardown, curate, mock, author, address, response, replyArgs, renderComponent, hash } from './host-harness.mjs'
 const { host } = await load('lib/host.svelte.ts')
-const { policyMessage, saveHostList, adoptPolicy, readHostPolicy, allowHostPosting } = await load('lib/host-policy.ts')
+const { policyMessage, saveHostList, adoptPolicy, readHostPolicy, allowHostPosting, watchHostPolicy } = await load('lib/host-policy.ts')
 const { wallet } = await load('lib/wallet.svelte.ts')
 beforeEach(() => { install(); curate([]) })
 after(teardown)
@@ -116,4 +116,42 @@ for (const sponsored of [false, true]) test(`a ${sponsored ? 'sponsored' : 'paid
   args.wallet.ensureChain = async () => { mock.hostPolicy.blocked = [author] }
   await assert.rejects(publishPost(args), /posting blocked by host/)
   assert.equal(mock.calls.some(c => ['eth_sendTransaction', 'wallet_sendTransaction', 'eth_signTypedData_v4'].includes(c.method)), false)
+})
+
+
+test('policy polling waits, skips absent policy, rechecks a return mid-read, and stops cleanly', async () => {
+  const saved = { window: globalThis.window, document: globalThis.document, setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval }
+  let tick, cleared = false, calls = 0, release
+  globalThis.window = new EventTarget()
+  globalThis.document = Object.assign(new EventTarget(), { visibilityState: 'visible' })
+  globalThis.setInterval = (callback, delay) => { tick = callback; assert.equal(delay, 30_000); return 42 }
+  globalThis.clearInterval = id => { assert.equal(id, 42); cleared = true }
+  const flush = () => new Promise(setImmediate)
+  const policy = host.status.host_policy
+  globalThis.fetch = async () => { calls++; return new Promise(resolve => { release = value => resolve(response(value)) }) }
+  const stop = watchHostPolicy()
+  try {
+    await flush(); assert.equal(calls, 0, 'no immediate read')
+    host.status.host_policy = null
+    tick(); await flush(); assert.equal(calls, 0, 'no configured policy')
+    host.status.host_policy = policy
+    document.visibilityState = 'hidden'
+    tick(); await flush(); assert.equal(calls, 0)
+    document.visibilityState = 'visible'
+    window.dispatchEvent(new Event('focus'))
+    tick(); await flush(); assert.equal(calls, 1, 'one outstanding read')
+    window.dispatchEvent(new Event('blur'))
+    window.dispatchEvent(new Event('focus'))
+    document.dispatchEvent(new Event('visibilitychange'))
+    release({ ...policy, revision: '2' })
+    await flush(); assert.equal(calls, 2, 'one recheck for the return during a read')
+    assert.equal(host.status.host_policy.revision, '2')
+    stop()
+    release({ ...policy, revision: '3' })
+    await flush()
+    assert.equal(host.status.host_policy.revision, '2', 'no adoption after cleanup')
+    window.dispatchEvent(new Event('focus')); tick(); await flush()
+    assert.equal(calls, 2)
+    assert.equal(cleared, true)
+  } finally { stop(); Object.assign(globalThis, saved) }
 })

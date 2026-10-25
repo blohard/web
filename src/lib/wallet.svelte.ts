@@ -7,6 +7,7 @@ import { browserWallet, type BrowserWallet } from './browser-wallet'
 import { WalletConnectionError } from './errors'
 import type { RemoteWallet, RemoteWalletKind, WalletChoice, WalletFactories } from './remote-wallet'
 import { sameAddress } from './format'
+import { withTimeout } from '../shared/with-timeout'
 import { readJSON, writeJSON } from './storage'
 import type { ChainInfo, Eip1193Provider } from './types'
 
@@ -33,13 +34,6 @@ type Probe = 'ok' | 'broken' | 'unsupported'
 
 /** The wallet will not serve this method (4200, -32601), or not to this site (4100): not a broken wallet. */
 export const unserved = (code: number | undefined): boolean => code === 4100 || code === 4200 || code === -32601
-
-/** A wallet call that gives up after `ms` with the error `expired` makes. */
-export function withTimeout<T>(call: Promise<T>, ms: number, expired: () => Error): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  return Promise.race([call, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(expired()), ms) })])
-    .finally(() => clearTimeout(timer))
-}
 
 export class Wallet {
   /**

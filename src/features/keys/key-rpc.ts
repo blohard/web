@@ -1,7 +1,8 @@
 import { createPublicClient, custom, http, type Transport } from 'viem'
 import { chainLabel, toViemChain } from '../../lib/chains'
 import { sharedRead } from '../../shared/shared-read'
-import { unserved, wallet, withTimeout } from '../../lib/wallet.svelte'
+import { unserved, wallet } from '../../lib/wallet.svelte'
+import { withTimeout } from '../../shared/with-timeout'
 import type { ChainInfo, Eip1193Provider } from '../../lib/types'
 
 const publicClients = new Map<string, ReturnType<typeof makeClient>>()

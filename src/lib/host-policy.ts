@@ -6,6 +6,7 @@ import { requestPath, integer } from './api'
 import type { HostPolicy } from './types'
 import { captureWallet, type ActionWallet } from './wallet-action'
 import { guarded } from './signer'
+import { pollVisible } from '../shared/visible-poll'
 
 export type HostList = 'curated' | 'blocked' | 'bots'
 export type ListEdit = { revision: string; expires: number; list: HostList; action: 'add' | 'remove'; addresses: Address[] }
@@ -51,18 +52,12 @@ export async function readHostPolicy(): Promise<HostPolicy | null> {
 
 /** Refreshes policy only; it never reloads a stream or replaces its snapshot. */
 export function watchHostPolicy(): () => void {
-  let active = true, reading = false
-  const ask = async () => {
-    if (!active || reading || document.visibilityState !== 'visible' || !host.status?.host_policy) return
-    reading = true
-    try { const policy = await requestPath<HostPolicy | null>('/api/host-policy'); if (active) adoptPolicy(policy) }
-    catch { /* Keep the last known policy. Writes still check at the host. */ }
-    finally { reading = false }
-  }
-  const timer = setInterval(() => void ask(), 30_000)
-  window.addEventListener('focus', ask)
-  document.addEventListener('visibilitychange', ask)
-  return () => { active = false; clearInterval(timer); window.removeEventListener('focus', ask); document.removeEventListener('visibilitychange', ask) }
+  return pollVisible(
+    () => host.status?.host_policy ? requestPath<HostPolicy | null>('/api/host-policy') : Promise.resolve(undefined),
+    policy => { if (policy !== undefined) adoptPolicy(policy) },
+    () => { /* Keep the last known policy. Writes still check at the host. */ },
+    30_000, false,
+  )
 }
 
 /** The host admin's wallet, ready to sign for the admin chain: list edits and takedowns both use it. */

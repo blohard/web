@@ -10,7 +10,7 @@ import { sameAddress } from '../../lib/format'
 import { signerFor } from '../../lib/signer'
 import { MAX_KEY_SUPPLY } from './key-curve'
 import type { ChainInfo, Eip1193Provider } from '../../lib/types'
-import { withTimeout } from '../../lib/wallet.svelte'
+import { withTimeout } from '../../shared/with-timeout'
 
 export class KeyActivationReverted extends Error {
   constructor() { super('activation transaction reverted. refresh before trying again') }
