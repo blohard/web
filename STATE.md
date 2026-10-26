@@ -527,3 +527,10 @@ own keyring is one read that every view shares (`keyring.ts`): a read in flight
 or under a minute old answers the navigation links on each page visit and home's
 first load, and each poll asks again. An explicit refresh or a confirmed key
 transaction forgets it, so the next view asks the host.
+
+Profiles show “holds your key” when the viewed account holds at least one of the
+connected reader's keys on the profile's chain. A one-entry indexed balance read
+seeks directly to the reader's address, so truncated feed membership does not hide
+holders. The hint is read on profile/account/chain changes and explicit refresh;
+it is absent on your own profile, while signed out, without a keyring index, and
+while the read is pending or failed. It never prompts the wallet or reads chain RPC.

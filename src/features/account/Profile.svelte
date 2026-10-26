@@ -6,6 +6,7 @@
   // controls, and their posts and replies as two tabs of the feed.
   import { untrack } from 'svelte'
   import type { Address } from 'viem'
+  import { holdsKey } from '../keys/keyring-balances'
   import { accountKeyStatus } from '../keys/account-key-status.svelte'
   import { keyDeployment } from '../keys/account-keys-config'
   import { blockSetup, enforceBlocks, isBlocked, pressBlock } from './blocking'
@@ -38,6 +39,20 @@
   let tab = $derived(router.route.kind === 'user' && router.route.replies ? 'replies' : 'posts')
 
   let mine = $derived(wallet.is(address))
+  // A display hint from the profile chain's index, never a wallet permission check.
+  const keyHolder = new Resource<boolean>()
+  let indexedMarket = $derived(host.keyringMarket(chain.id))
+  let holdingKey = $derived(`${chain.id}/${chain.contract}/${indexedMarket}/${wallet.account}/${address}/${refreshRevision}`)
+  let holdingQuery = $derived.by(() => {
+    void refreshRevision
+    return indexedMarket && wallet.account && !mine
+      ? holdsKey(chain, address, indexedMarket, wallet.account) : null
+  })
+  $effect(() => {
+    if (holdingQuery) return keyHolder.watch(holdingQuery, holdingKey)
+  })
+  let holdsMyKey = $derived(holdingQuery !== null && !keyHolder.pending
+    && !keyHolder.failure(holdingKey) && keyHolder.value(holdingKey) === true)
   let hostBlocked = $derived(host.blocked(address))
   let setup = $derived(blockSetup(chain))
   /** Whether the reader has blocked this account, read from indexed membership on refresh; a block or unblock made here is known at once. */
@@ -148,6 +163,7 @@
 <section class="profile">
   <AccountIdentity {address}>
     <AccountKeyBadge {chain} {address} active={keys.active} />
+    {#if holdsMyKey}<span class="badge" title="holds at least one of your account keys on this chain">holds your key</span>{/if}
     {#if chain.curated && host.curated(address)}<span class="badge" title="selected by this host">✓ curated</span>{/if}
     {#if mine}
       <span class="dim small">· you</span>

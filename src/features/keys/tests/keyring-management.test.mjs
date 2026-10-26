@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { after, beforeEach, test } from 'node:test'
 import { load, install, teardown, mock, address, hash, deferred, renderComponent } from '../../../../scripts/harness.mjs'
-const { readKeyringPage, byQuantity, keyringPageChanged } = await load('features/keys/keyring-balances.ts')
+const { readKeyringPage, holdsKey, byQuantity, keyringPageChanged } = await load('features/keys/keyring-balances.ts')
 const { KeyringBalancesView } = await load('features/keys/keyring-balances-view.svelte.ts')
 const { parse, href } = await load('features/navigation/router.svelte.ts')
 const market = address('77'), account = address('22'), creator = address('33')
@@ -210,4 +210,25 @@ test('a keyring URL selects its pane without a wallet even if a different pane w
   assert.equal(place.side, 'holders')
   place.side = 'holding'
   assert.match(await render(), /aria-current="page"[^>]*>their key holders/)
+})
+
+test('profile key holding seeks one creator beyond truncated membership, with no wallet read', async () => {
+  const calls = []
+  globalThis.fetch = async url => {
+    calls.push(url)
+    return Response.json({ ...raw(), total: 1000, next: creator })
+  }
+  assert.equal(await holdsKey(mock.chain, account, market, creator), true)
+  const url = new URL(calls[0], 'https://host.invalid')
+  assert.equal(url.pathname, `/api/chains/${mock.chain.id}/keyring/${account}/balances`)
+  assert.equal(url.searchParams.get('view'), 'holding')
+  assert.equal(url.searchParams.get('limit'), '1')
+  assert.equal(BigInt(url.searchParams.get('after')), BigInt(creator) - 1n)
+  assert.equal(calls.length, 1)
+  globalThis.fetch = async () => Response.json({ ...raw(), entries: [{ address: address('44'), balance: 1 }] })
+  assert.equal(await holdsKey(mock.chain, account, market, creator), false)
+  globalThis.fetch = async () => Response.json({ ...raw(), entries: [], total: 0 })
+  assert.equal(await holdsKey(mock.chain, account, market, creator), false)
+  globalThis.fetch = async () => Response.json({ error: 'keyring_syncing' }, { status: 503 })
+  await assert.rejects(holdsKey(mock.chain, account, market, creator), /keyring syncing/)
 })

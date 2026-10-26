@@ -48,6 +48,15 @@ export async function readKeyringPage(chain: ChainInfo, account: Address, market
     checkpoint: { block: BigInt(result.checkpoint.block), hash: result.checkpoint.hash } }
 }
 
+/** Seek directly to one creator, including holdings beyond the feed's truncated membership. */
+export async function holdsKey(chain: ChainInfo, holder: Address, market: Address, creator: Address): Promise<boolean> {
+  const position = BigInt(creator)
+  const after = position === 0n ? null : getAddress(`0x${(position - 1n).toString(16).padStart(40, '0')}`)
+  const page = await readKeyringPage(chain, holder, market, 'holding', after, 1)
+  return sameAddress(holder, creator) ? page.ownBalance > 0
+    : page.entries.some(entry => sameAddress(entry.address, creator))
+}
+
 /** A new checkpoint alone is not a balance change. Compare only the displayed page and totals. */
 export function keyringPageChanged(shown: KeyringPage, latest: KeyringPage): boolean {
   return shown.active !== latest.active || shown.ownBalance !== latest.ownBalance || shown.total !== latest.total
