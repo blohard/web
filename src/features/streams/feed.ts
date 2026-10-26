@@ -295,8 +295,7 @@ function eligible(f: Filter, v: View, chain: ChainInfo, r: api.RecordImage): boo
 export async function acceptPublication(chain: ChainInfo, id: bigint, parentId: bigint): Promise<void> {
   const matches = (v: View) => v.chain.id === chain.id && sameAddress(v.chain.contract, chain.contract)
   const visible = mounted ? views.get(mounted.key) : undefined
-  // Profiles do not poll periodically. The same quiet read gives a local
-  // confirmation its cue there too, without changing any displayed records.
+  // Check immediately after a local confirmation, without changing displayed records.
   const cue = visible && matches(visible) ? peekFeed(chain, visible.filter).then(() => {}, () => {}) : Promise.resolve()
   const targets = [...views].filter(([key, v]) => key !== mounted?.key && v.at && matches(v))
   if (!targets.length) return cue
@@ -329,7 +328,8 @@ export const feedKey = (chain: ChainInfo, filter: Filter) => `${chain.id}/${chai
  * replies inside conversations the reader opened under the stream's cards count
  * too, when their branch is complete and a refresh would append them; a reply
  * that also qualifies for the stream counts once. One poll reads at most one
- * changes page, continuing from the previous quiet poll. Only matching rows cue refresh.
+ * changes page, continuing from the previous quiet poll. Profiles also cue changes
+ * to displayed reply counts, since other authors' replies are outside their filter.
  */
 export async function peekFeed(chain: ChainInfo, filter: Filter, listener?: Listener): Promise<number | null> {
   const key = feedKey(chain, filter)
@@ -338,7 +338,11 @@ export async function peekFeed(chain: ChainInfo, filter: Filter, listener?: List
   if (v?.loading) await v.loading.catch(() => {})
   if (!v?.at || v.loading) return null
   const branches = completeBranches(chain, openRoots(key), shownParents(key))
+  const profile = filter.kind === 'author' || filter.kind === 'author-replies'
+  const displayed = new Set(profile ? v.selection?.rows.slice(0, v.limit)
+    .flatMap(row => [row.root.id, ...row.cards.map(card => card.post.id)]) : [])
   const own: api.ChangeScope = { feed: feedQuery(filter, chain), gates: false }
+  if (profile) own.ids = [...displayed].map(String)
   if (branches.size) own.parents = [...branches.keys()].map(String)
   const scope = listening(own, listener)
   const at = v.at, owner = mounted
@@ -350,7 +354,10 @@ export async function peekFeed(chain: ChainInfo, filter: Filter, listener?: List
     if (branch && !endingOf(r.gate)) return true
     return eligible(filter, v, chain, r)
       && !collapsedParents(key, v.selection?.rows ?? []).has(r.parentId)
-  }, listener?.heard)
+  }, listener?.heard, profile ? records => records.some(wire => {
+    const row = api.record(wire)
+    return displayed.has(row.id) && v.counts.has(row.id) && row.replies !== v.counts.get(row.id)
+  }) : undefined)
   const pending = policyChanged(v) ? Infinity : count
   if (mounted === owner && owner?.key === key && v.at === at && !v.loading) owner.cue(pending)
   return pending

@@ -266,7 +266,7 @@ for (const [resume, title] of [[false, 'a fresh visit does not flash'], [true, '
 })
 
 
-for (const kind of ['timeline', 'curated', 'following', 'profile']) test(`${kind} refresh ignores own activity from another tab and still loads it on refresh`, async t => {
+for (const kind of ['timeline', 'curated', 'following', 'profile']) test(`${kind} refresh excludes own posts from the new-post count and still loads them on refresh`, async t => {
   const previous = wallet.account, other = address('33')
   t.after(() => { wallet.account = previous })
   wallet.account = null
@@ -283,14 +283,17 @@ for (const kind of ['timeline', 'curated', 'following', 'profile']) test(`${kind
     const root = await readRoot(mock.chain, 1n)
     await replySlice(mock.chain, root.replies, 1n, 20)
   }
-  posts.push(feedPost(2), feedPost(3, 1))
+  posts.push(feedPost(2))
   feedHistory(posts)
-  assert.equal(await feed.peekFeed(mock.chain, f), kind === 'profile' ? 1 : 2)
+  assert.equal(await feed.peekFeed(mock.chain, f), 1)
   wallet.account = author
   assert.equal(await feed.peekFeed(mock.chain, f), 0, 'an already queued own post stops counting too')
+  posts.push(feedPost(3, 1))
+  feedHistory(posts)
+  assert.equal(await feed.peekFeed(mock.chain, f), kind === 'profile' ? Infinity : 0, 'profiles cue changed counts even for own replies')
   posts.push(feedPost(4, 0, other), feedPost(5, 1, other, author))
   feedHistory(posts)
-  assert.equal(await feed.peekFeed(mock.chain, f), kind === 'profile' ? 0 : 2, 'other authors still cue normally')
+  assert.equal(await feed.peekFeed(mock.chain, f), kind === 'profile' ? Infinity : 2, 'other authors still cue normally')
   const refreshed = await counted(feed.loadFeed(mock.chain, f))
   assert.ok(drawn(refreshed).includes(2), 'the cue filter never excludes own posts from the feed')
   if (kind !== 'profile') assert.ok(drawn(refreshed).includes(3), 'new own replies bypass automatic folding too')

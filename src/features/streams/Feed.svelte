@@ -8,7 +8,7 @@
   // within a visit restores its shown rows and reading position. A browser reload resets it.
   import { onDestroy, untrack } from 'svelte'
   import { FirstScreen, provideFirstScreen, revealStream } from '../../shared/first-screen.svelte'
-  import { feedKey, mountFeed, loadFeed, resumeFeed, olderFeed, type Page } from './feed'
+  import { feedKey, mountFeed, loadFeed, resumeFeed, olderFeed, peekFeed, type Page } from './feed'
   import { appliesMutes, type Filter } from './feed-policy'
   import { refreshCue } from '../../shared/refresh-cue.svelte'
   import { shortDate } from '../../lib/format'
@@ -126,6 +126,17 @@
       )
     })
   })
+  // Home shares its poll with notifications. Profile streams need their own,
+  // including a check on return to a retained snapshot.
+  $effect(() => {
+    const c = chain, f = filter
+    if (f.kind !== 'author' && f.kind !== 'author-replies') return
+    void reloadRevision
+    void inPlaceReloadRevision
+    void muted.addresses
+    return pollVisible(() => peekFeed(c, f), () => {}, () => {}, 30_000)
+  })
+
   /**
    * A walk belongs to the load it extended. Its result goes through the same
    * retained view as a refresh, so a later refresh keeps the walked page on

@@ -264,7 +264,8 @@ Neither policy would change the chain.
   copies move into that list once it is ready. Counts travel with indexed records.
   Missing context counts may arrive after the rows.
 - A feed never changes on its own. A client may poll quietly and show how many posts a refresh would
-  add. Nothing moves until the reader asks.
+  add. On profiles it also offers refresh when displayed reply counts change, even if the replies
+  themselves are outside the profile filter. Nothing moves until the reader asks.
 - Long bodies in streams, reply lists and thread ancestors have a height-limited preview, including
   their attachments. "Read full post" opens the addressed post's thread, where its body is shown in
   full. Back restores the stream. Controls entirely past the cut must not remain keyboard targets,

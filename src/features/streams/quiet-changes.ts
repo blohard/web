@@ -25,27 +25,25 @@ export function listening(scope: api.ChangeScope, listener?: Listener): api.Chan
  * posts count; after fifty we stop counting, and stop scanning until the
  * reader refreshes unless a listener still reads the range. */
 export class QuietChanges {
-  private scan: { base: api.At; scope: string; from: api.At; until?: api.At; rows: Map<bigint, api.RecordImage> } | null = null
-
-  private resetRequired = false
+  private scan: { base: api.At; scope: string; from: api.At; until?: api.At; rows: Map<bigint, api.RecordImage>; refreshRequired: boolean } | null = null
 
   pending(base: api.At): number {
     if (this.scan?.base !== base) return 0
-    return this.resetRequired || this.scan.rows.size > 50 ? Infinity : this.scan.rows.size
+    return this.scan.refreshRequired || this.scan.rows.size > 50 ? Infinity : this.scan.rows.size
   }
 
   /** A locally merged post is no longer unseen; unrelated queued changes stay. */
   forget(id: bigint): void { this.scan?.rows.delete(id) }
 
-  /** `heard` sees each answer too, so another reader of the same range needs no request of its own. */
+  /** `heard` shares answers with another reader; `changed` cues updates to existing cards without counting them as new posts. */
   async peek(chain: ChainInfo, base: api.At, scope: api.ChangeScope, keeps: (row: api.RecordImage) => boolean | Promise<boolean>,
-    heard?: (answer: api.Changes, from: api.At) => void): Promise<number> {
+    heard?: (answer: api.Changes, from: api.At) => void,
+    changed?: (records: api.WireRecord[]) => boolean): Promise<number> {
     const key = JSON.stringify(scope)
     if (!this.scan || this.scan.base !== base || this.scan.scope !== key) {
       // A newly opened branch needs its own scan, but posts already found for
       // this displayed snapshot remain pending until an explicit refresh.
-      this.resetRequired = false
-      this.scan = { base, scope: key, from: base, rows: this.scan?.base === base ? this.scan.rows : new Map() }
+      this.scan = { base, scope: key, from: base, refreshRequired: false, rows: this.scan?.base === base ? this.scan.rows : new Map() }
     }
     const scan = this.scan
     const rows = new Map(scan.rows)
@@ -60,7 +58,7 @@ export class QuietChanges {
     } catch (error) {
       // The host no longer serves this view's position: only a refresh,
       // which starts the view over, can show what changed.
-      if (api.positionLost(error)) { this.resetRequired = true; return Infinity }
+      if (api.positionLost(error)) { scan.refreshRequired = true; return Infinity }
       throw error
     }
     heard?.(answer, from)
@@ -75,9 +73,10 @@ export class QuietChanges {
       }
       if (rows.size > 50) break
     }
+    if (changed?.(answer.records)) scan.refreshRequired = true
     scan.rows = rows
     scan.from = api.afterChanges(from, answer)
     scan.until = answer.more ? answer.until : undefined
-    return rows.size > 50 ? Infinity : rows.size
+    return this.pending(base)
   }
 }

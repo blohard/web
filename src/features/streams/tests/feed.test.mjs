@@ -1,7 +1,7 @@
 // Feeds: pairs and groups, deletion and muting in a timeline, replies to the reader, the sponsored-tab rule, the refresh cue.
 import assert from 'node:assert/strict'
 import { after, beforeEach, test } from 'node:test'
-import { curate, load, mock, install, teardown, address, hash, author, txHash, feedPost, feedHistory, ids, counted, at, gateChanged, response } from '../../../../scripts/host-harness.mjs'
+import { curate, load, mock, install, teardown, address, hash, author, txHash, feedPost, feedHistory, ids, counted, at, gateChanged, response, deferred } from '../../../../scripts/host-harness.mjs'
 
 const { TOMBSTONE, REMOVED } = await load('lib/board.ts')
 const { getMessage } = await load('lib/messages.ts')
@@ -913,4 +913,88 @@ test('blocklist changes reset a retained home feed on refresh, including unblock
   assert.deepEqual(leads(await loadFeed(mock.chain, filter)), [1])
   mock.membershipEvents.push({ kind: 'membership', list, member: blocked, present: false, position: { block: '4', log: 0 } })
   assert.deepEqual(leads(await loadFeed(mock.chain, filter)), [2, 1])
+})
+
+for (const kind of ['author', 'author-replies']) test(`${kind} cues unseen reply counts without changing the retained profile`, async () => {
+  const stranger = address('77')
+  const filter = { kind, address: author }
+  const posts = kind === 'author' ? [feedPost(1)] : [feedPost(1, 0, stranger), feedPost(2, 1)]
+  const parent = posts.at(-1).id
+  feedHistory(posts)
+  const first = await counted(loadFeed(mock.chain, filter))
+  assert.equal(first.counts.get(parent), 0)
+  feedHistory([...posts, feedPost(3, parent, stranger)])
+  assert.equal(await peekFeed(mock.chain, filter), Infinity, 'a reply outside the author filter still needs a refresh')
+  assert.equal(await peekFeed(mock.chain, filter), Infinity, 'the cue survives a later empty poll')
+  assert.equal(feedCue(mock.chain, filter), Infinity)
+  const resumed = await counted(resumeFeed(mock.chain, filter))
+  assert.equal(resumed.counts.get(parent), 0, 'Back preserves the snapshot until refresh')
+  const fresh = await counted(loadFeed(mock.chain, filter))
+  assert.equal(fresh.counts.get(parent), 1, 'ordinary refresh updates the count')
+  assert.equal(await peekFeed(mock.chain, filter), 0)
+  assert.equal(feedCue(mock.chain, filter), 0)
+  assert.equal(first.counts.get(parent), 0, 'the old page was not mutated')
+})
+
+
+test('profile reply counts cue deletions but not unrelated or unchanged records', async () => {
+  const stranger = address('77'), filter = { kind: 'author', address: author }
+  const posts = [feedPost(1), feedPost(2, 1, stranger)]
+  feedHistory(posts)
+  const first = await counted(loadFeed(mock.chain, filter))
+  assert.equal(first.counts.get(1n), 1)
+  assert.equal(await peekFeed(mock.chain, filter), 0)
+  feedHistory([...posts, feedPost(3, 0, stranger), feedPost(4, 3, stranger)])
+  assert.equal(await peekFeed(mock.chain, filter), 0, 'another conversation does not change this profile')
+  gateChanged(2n, TOMBSTONE, 5n)
+  assert.equal(await peekFeed(mock.chain, filter), Infinity)
+  assert.equal(first.counts.get(1n), 1)
+  const refreshed = await counted(loadFeed(mock.chain, filter))
+  assert.equal(refreshed.counts.get(1n), 0)
+  assert.equal(await peekFeed(mock.chain, filter), 0)
+})
+
+test('profile replies cue changed counts on displayed context outside the author filter', async () => {
+  const stranger = address('77'), filter = { kind: 'author-replies', address: author }
+  const posts = [feedPost(1, 0, stranger), feedPost(2, 1)]
+  feedHistory(posts)
+  const first = await counted(loadFeed(mock.chain, filter))
+  assert.equal(first.rows[0].root.id, 1n)
+  assert.equal(first.counts.get(1n), 1)
+  feedHistory([...posts, feedPost(3, 1, stranger)])
+  assert.equal(await peekFeed(mock.chain, filter), Infinity)
+  assert.equal(first.counts.get(1n), 1)
+  const refreshed = await counted(loadFeed(mock.chain, filter))
+  assert.equal(refreshed.counts.get(1n), 2)
+  assert.equal(await peekFeed(mock.chain, filter), 0)
+})
+
+
+test('a late profile count check cannot cue a snapshot already refreshed', async () => {
+  const filter = { kind: 'author', address: author }
+  feedHistory([feedPost(1)])
+  await counted(loadFeed(mock.chain, filter))
+  feedHistory([feedPost(1), feedPost(2, 1, address('77'))])
+  const fetch = globalThis.fetch, started = deferred(), release = deferred()
+  let delayed = false
+  globalThis.fetch = async (url, init) => {
+    const answer = await fetch(url, init)
+    if (String(url).endsWith('/changes') && !delayed) {
+      delayed = true
+      started.resolve()
+      await release.promise
+    }
+    return answer
+  }
+  const old = peekFeed(mock.chain, filter)
+  try {
+    await started.promise
+    feedHistory([feedPost(1), feedPost(2, 1, address('77')), feedPost(3, 1, address('77'))])
+    assert.equal((await counted(loadFeed(mock.chain, filter))).counts.get(1n), 2)
+    assert.equal(await peekFeed(mock.chain, filter), 0)
+    release.resolve()
+    await old
+    assert.equal(feedCue(mock.chain, filter), 0)
+    assert.equal(await peekFeed(mock.chain, filter), 0)
+  } finally { release.resolve(); await old; globalThis.fetch = fetch }
 })
