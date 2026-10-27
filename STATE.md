@@ -206,7 +206,13 @@ ancestor. Directly connected conversations still rank by their newest selected r
 On load or refresh, all Home streams preview only replies newer than the
 next conversation's newest activity, keeping their immediate parent context.
 The last conversation has no age cutoff. Following, Keyring and Everyone retain their
-three-reply limit; Curated has no fixed reply limit.
+three-reply limit; Curated has no fixed reply limit. After folding, each connected
+part of the displayed cards becomes its own row, ranked by its newest displayed
+post. A selected ancestor separated by a hidden reply stays at its own position;
+context-only ancestors without displayed children disappear. Splitting adds no
+cards. Parts retain the original group's preview cutoff and allowance during paging
+and local reloads, while each part owns its expansion choices. Back restores the
+same rows; an explicit refresh can regroup them using the current preview rules.
 Replies posted after the previous completed stream load's checkpoint bypass both
 limits on explicit Refresh. Background polls never advance this baseline. Local
 reloads after posting, deleting or muting preserve existing previews and the

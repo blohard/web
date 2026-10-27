@@ -91,12 +91,14 @@ test('a long conversation previews only its newest replies and counts only the c
   feedHistory([root, ...replies])
   const page = await counted(loadFeed(mock.chain, { kind: 'following', includeRepliesToViewer: false, authors: [author] }))
   const row = page.rows[0]
-  assert.deepEqual(ids(row.cards.map((c) => c.post)), [97, 98, 99, 100], 'the newest three and their immediate followed parent, without recursively filling the gap')
-  assert.equal(row.root.joins, false, 'no line bridges the omitted replies')
-  assert.equal(row.cards[0].post.parentAuthor, author, 'the omitted parent remains known for attribution and moderation')
-  assert.deepEqual(row.cards.filter((c) => c.gap).map((c) => c.post.id), [97n], 'only the card after the cut links to what it answers')
-  assert.deepEqual([...page.counts.keys()].sort((a, b) => Number(a - b)), [1n, 97n, 98n, 99n, 100n])
-  assert.deepEqual([row.root.drawn, ...row.cards.map((c) => c.drawn)], [0, 1, 1, 1, 0])
+  assert.equal(row.root.id, 97n, 'the newest branch starts at its immediate parent, without filling the gap')
+  assert.deepEqual(ids(row.cards.map((c) => c.post)), [98, 99, 100])
+  assert.equal(row.root.joins, true)
+  assert.equal(row.root.post.parentId, 96n, 'the new root still links to what it answers')
+  assert.equal(row.root.post.parentAuthor, author, 'the omitted parent remains known for attribution and moderation')
+  assert.deepEqual(row.cards.filter((c) => c.gap).map((c) => c.post.id), [])
+  assert.deepEqual([...page.counts.keys()].sort((a, b) => Number(a - b)), [97n, 98n, 99n, 100n])
+  assert.deepEqual([row.root.drawn, ...row.cards.map((c) => c.drawn)], [1, 1, 1, 0])
 })
 
 test('the preview is the newest three replies across branches, oldest first, even when depth-first order ends on an older sibling', () => {
@@ -465,9 +467,9 @@ for (const rootSelected of [false, true]) test(`curated ${rootSelected ? 'keeps 
     feedPost(82, 76, other), feedPost(100, 82), feedPost(562),
     feedPost(578, 100, other), feedPost(579, 578)])
   const page = await loadFeed(mock.chain, { kind: 'timeline', curatedOnly: true, viewer: author })
-  const row = page.rows.find(r => r.root.id === 75n)
-  assert.deepEqual(ids(row.cards.map(c => c.post)), [100, 578, 579])
-  assert.equal(row.root.omitted, !rootSelected, 'a root kept only for context needs a displayed direct reply')
+  assert.deepEqual(page.rows.map(r => r.root.id), rootSelected ? [100n, 562n, 75n] : [100n, 562n])
+  assert.deepEqual(ids(page.rows[0].cards.map(c => c.post)), [578, 579])
+  if (rootSelected) assert.deepEqual(page.rows[2].cards, [], 'an independently selected root stays at its own position')
 })
 
 test('curated keeps an unlisted parent when a displayed reply directly answers it', async () => {
@@ -529,4 +531,63 @@ for (const stream of ['curated', 'following', 'everyone']) test(`${stream} retur
     const returned = await counted(read(mock.chain, filter))
     assert.deepEqual(returned.rows, first.rows, 'retaining a context card must not promote it into an automatic preview')
   }
+})
+
+for (const stream of ['following', 'curated', 'everyone']) test(`${stream} splits a conversation where preview folding hides the connecting reply`, async () => {
+  curate([author])
+  const filter = stream === 'following'
+    ? { kind: 'following', authors: [author], includeRepliesToViewer: false }
+    : { kind: 'timeline', curatedOnly: stream === 'curated', viewer: author }
+  feedHistory([feedPost(1), feedPost(2, 1), feedPost(3, 2), feedPost(4), feedPost(5, 3)])
+  const page = await counted(loadFeed(mock.chain, filter))
+  assert.deepEqual(page.rows.map(r => r.root.id), [3n, 4n, 1n])
+  assert.deepEqual(page.rows.map(r => r.activity.id), [5n, 4n, 1n], 'only the displayed branch supplies its rank')
+  assert.deepEqual(page.rows.map(r => ids(r.cards.map(c => c.post))), [[5], [], []])
+  assert.equal(page.counts.get(1n), 1, 'the folded reply is still available from its parent')
+  for (const read of [resumeFeed, olderFeed]) {
+    assert.deepEqual((await counted(read(mock.chain, filter))).rows, page.rows, 'Back and paging keep the split and its preview cutoff')
+  }
+  assert.deepEqual((await counted(loadFeed(mock.chain, filter, { preservePreviews: true }))).rows, page.rows, 'a local reload keeps the same parts')
+})
+
+test('two active branches separated by folded replies rank independently without duplicating cards', async () => {
+  const filter = { kind: 'following', authors: [author], includeRepliesToViewer: false }
+  feedHistory([feedPost(1), feedPost(2, 1), feedPost(3, 1), feedPost(4, 2), feedPost(5, 3),
+    feedPost(6, 4), feedPost(7, 5), feedPost(8), feedPost(9, 6), feedPost(10, 7)])
+  const page = await counted(loadFeed(mock.chain, filter))
+  assert.deepEqual(page.rows.map(r => r.root.id), [7n, 6n, 8n, 1n])
+  assert.deepEqual(page.rows.map(r => ids(r.cards.map(c => c.post))), [[10], [9], [], []])
+  const shown = page.rows.flatMap(r => [r.root.id, ...r.cards.map(c => c.post.id)])
+  assert.equal(new Set(shown).size, shown.length)
+  assert.deepEqual((await counted(loadFeed(mock.chain, filter, { preservePreviews: true }))).rows, page.rows)
+})
+
+test('local updates preserve expansion ownership and paging inside a split branch', async () => {
+  const filter = { kind: 'timeline', viewer: author }
+  const history = [feedPost(1), feedPost(2, 1), feedPost(3, 2), feedPost(4), feedPost(5, 3)]
+  feedHistory(history)
+  await loadFeed(mock.chain, filter)
+  const expansion = new RowExpansion(expansionOf(feedKey(mock.chain, filter)), 3n)
+  expansion.press(3n)
+  expansion.views().set(3n, { limit: 40, open: { '5': true } })
+  feedHistory([...history, feedPost(6)])
+  const page = await loadFeed(mock.chain, filter, { preservePreviews: true })
+  assert.deepEqual(page.rows.map(r => r.root.id), [6n, 3n, 4n, 1n])
+  assert.deepEqual(ids(page.rows[1].cards.map(c => c.post)), [5])
+  assert.equal(expansion.isOpen(3n), true)
+  assert.deepEqual(expansion.views().get(3n), { limit: 40, open: { '5': true } })
+  expansion.hide(3n)
+  const hidden = await loadFeed(mock.chain, filter, { preservePreviews: true })
+  assert.deepEqual(hidden.rows.map(r => r.key), page.rows.map(r => r.key))
+  assert.equal(expansion.isHidden(3n), true)
+})
+
+test('a local deletion cannot leave a folded reply ranking an old root', async () => {
+  const filter = { kind: 'timeline', viewer: author }
+  feedHistory([feedPost(1), feedPost(2), feedPost(3, 1), feedPost(4, 3), feedPost(5), feedPost(6, 4)])
+  await loadFeed(mock.chain, filter)
+  gateChanged(6n, '0x0000000000000000000000000000000000000001', 7n)
+  const page = await loadFeed(mock.chain, filter, { preservePreviews: true })
+  assert.deepEqual(page.rows.map(r => r.root.id), [5n, 2n, 1n])
+  assert.deepEqual(page.rows.map(r => r.activity.id), [5n, 2n, 1n])
 })

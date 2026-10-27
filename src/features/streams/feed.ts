@@ -8,7 +8,7 @@ import { SvelteMap } from 'svelte/reactivity'
 import * as api from '../../lib/api'
 import { endingOf, newestFirst, oldestFirst } from '../../lib/board'
 import { ancestorsOf, readMessage, rememberMessages } from '../../lib/messages'
-import { CONTEXT_DEPTH, groupProfileReplies, prepareRow, rowKey, type ConversationRowData } from './conversation'
+import { CONTEXT_DEPTH, groupProfileReplies, prepareRow, splitPreview, rowKey, type ConversationRowData } from './conversation'
 import { gates as ledger } from '../../lib/gates.svelte'
 import { sameAddress } from '../../lib/format'
 import { appliesMutes, groupsSelectedOnly, curatedSubjects, feedQuery, selectPost, type Filter } from './feed-policy'
@@ -232,18 +232,28 @@ async function select(f: Filter, v: View, chain: ChainInfo, preservePreviews = f
   const checkpoint = prior?.at?.checkpoint
   const newSince = (preservePreviews ? prior?.newSince : undefined)
     ?? (checkpoint ? BigInt(checkpoint.block) : undefined)
-  const previous = new Map(preservePreviews ? prior?.rows.slice(0, v.limit).map(row => [row.key, row]) : [])
-  const rows = posts.map((p, i) => {
-    const row = rowKey(f, p)
-    const saved = previous.get(row)
-    const after = homeStream ? saved ? saved.previewAfter : activity.get(posts[i + 1]?.id) : undefined
-    return { ...prepareRow(f, p, source, {
+  const previous = new Map<bigint, ConversationRowData[]>()
+  for (const row of prior?.rows.slice(0, v.limit) ?? []) {
+    const group = row.previewGroup ?? row.key
+    const parts = previous.get(group) ?? []
+    parts.push(row)
+    previous.set(group, parts)
+  }
+  const rows = posts.flatMap((p, i) => {
+    const group = rowKey(f, p)
+    const priorParts = previous.get(group) ?? []
+    const saved = preservePreviews ? priorParts : []
+    const owners = new Map(priorParts.flatMap(part => [part.root.id, ...part.cards.map(card => card.post.id)].map(id => [id, part.key] as const)))
+    const after = homeStream ? saved.length ? saved[0].previewAfter : activity.get(posts[i + 1]?.id) : undefined
+    const prepared = { ...prepareRow(f, p, source, {
       previewAfter: after,
       newSince: homeStream ? newSince : undefined,
-      keep: homeStream ? saved?.previewIds : undefined,
-      isOpen: id => homeStream && branchOpen(key, row, id),
+      keep: homeStream ? new Set(saved.flatMap(part => [...part.previewIds ?? []])) : undefined,
+      isOpen: id => homeStream && branchOpen(key, owners.get(id) ?? group, id),
     }), activity: activity.get(p.id) ?? p }
+    return homeStream ? splitPreview(prepared, ended, new Set(saved.map(part => part.root.id))) : [prepared]
   })
+  if (homeStream) rows.sort((a, b) => newestFirst(a.activity ?? a.lead, b.activity ?? b.lead))
   return { rows: profileReplies ? groupProfileReplies(rows, ended) : rows, at: v.at, newSince }
 }
 
