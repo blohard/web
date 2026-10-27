@@ -25,7 +25,7 @@
   import Replies, { type ReplyViews } from './Replies.svelte'
   import Retained from '../../shared/Retained.svelte'
 
-  let { chain, id, commit, refreshRevision = 0, focusReply = false }: { chain: ChainInfo; id: bigint; commit?: Hex; refreshRevision?: number; focusReply?: boolean } = $props()
+  let { chain, id, commit, refreshRevision = 0, focusReply = false, focusReplies = false }: { chain: ChainInfo; id: bigint; commit?: Hex; refreshRevision?: number; focusReply?: boolean; focusReplies?: boolean } = $props()
 
   type View = { ancestors: MessageRecord[]; branches: ReplyViews; repliesOpen: boolean; openAncestors: Record<string, boolean> }
   const saved = untrack(() => router.visit.state<View>(`thread/${chain.id}/${chain.contract}/${id}`, () => ({
@@ -41,8 +41,9 @@
   // so it survives Back and Forward like every other. A reply link (?reply)
   // presses it on arrival, and so does a reply already begun elsewhere, say
   // in a stream before "read full post": the draft is the post's, so it is
-  // here too. A return finds the box where it was left.
-  untrack(() => { if ((focusReply || hasDraft(chain.id, id)) && !returning) replying.open(chain.id, id) })
+  // here too. A reply-count link reads replies without opening that draft.
+  // A return finds the box where it was left.
+  untrack(() => { if ((focusReply || (!focusReplies && hasDraft(chain.id, id))) && !returning) replying.open(chain.id, id) })
 
   let repliesOpen = $state(saved.repliesOpen)
   let ancestors = $state<MessageRecord[]>(saved.ancestors)
@@ -179,7 +180,7 @@
         onready={() => readyAncestors[String(a.id)] = true} onchanged={() => localReloadRevision++} />
     {/if}
   {/each}
-  <div data-thread-card={id} tabindex="-1" use:revealWhen={{ key: !returning && !focusReply ? id : null, anchor: 'above' }}>
+  <div data-thread-card={id} tabindex="-1" use:revealWhen={{ key: !returning && !focusReply && !focusReplies ? id : null, anchor: 'above' }}>
   <MessageCard {gateRefreshReady} reloadKey={t.replies}
     {chain}
     msg={t.root}
@@ -201,7 +202,9 @@
     <div class="expander small"><ReplyCount count={count} expanded={repliesOpen} onclick={() => { repliesOpen = !repliesOpen; revealed = null }} /></div>
   {/if}
   {#if repliesOpen}
+  <div tabindex="-1" use:revealWhen={{ key: !returning && focusReplies ? id : null }}>
   <Replies separator={count === 0 || box.visible(chain, id)} onloading={loading => repliesLoading = loading} {gateRefreshReady} {chain} parentId={id} data={t.replies} reveal={revealed ?? undefined} {shown} views={saved.branches} onchanged={() => localReloadRevision++} />
+  </div>
   {/if}
   {/snippet}
 </Retained>

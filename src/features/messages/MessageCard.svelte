@@ -157,7 +157,7 @@
 
 <!-- Terminal placeholders link to their own page but never expand beneath this card. -->
 {#snippet replyControl()}
-  {#if !ended}<ReplyCount count={replyCount} more={moreReplies} {expanded} loading={repliesLoading} onclick={onexpand} {onhide} href={linkToThread ? thread : undefined} />{/if}
+  {#if !ended}<ReplyCount count={replyCount} more={moreReplies} {expanded} loading={repliesLoading} onclick={onexpand} {onhide} href={linkToThread ? href.replies(chain.id, msg.id) : undefined} />{/if}
 {/snippet}
 
 <!-- Keep action status alive when folding temporarily hides the footer. -->

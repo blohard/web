@@ -108,8 +108,11 @@ body or verdict cannot hold up the whole list. Collapsing cancels this deadline.
 When expanding a stream row, a preview already on screen remains until then.
 Standalone "in reply to" labels only link to the parent thread and have no reply
 controls. Reply controls belong to post cards.
-Every reply count expands in place, including preview cards; a post-number link
-opens its thread page. Opening reads only the requested direct-reply page. Existing
+Stream reply counts expand in place, including preview cards; a post-number link
+opens its thread page. Where inline expansion is unavailable, as in notifications,
+the count links to `?replies`: the thread reveals its replies as content settles,
+without opening a saved draft. Back and Forward restore the reader's saved position.
+Opening reads only the requested direct-reply page. Existing
 preview cards whose parents are not open stay below that page with their usual
 context labels. A kept preview joins its parent without the label when the parent
 is the last card in the loaded list, shows its full card, and nothing comes between

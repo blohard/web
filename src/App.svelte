@@ -214,7 +214,7 @@
       {/key}
     {:else if router.route.kind === 'thread' && routeChain}
       {#key `${routeChain.id}/${router.route.id}/${router.route.commit ?? ''}`}
-        <Thread chain={routeChain} id={router.route.id} commit={router.route.commit} focusReply={router.route.reply} {refreshRevision} />
+        <Thread chain={routeChain} id={router.route.id} commit={router.route.commit} focusReply={router.route.reply} focusReplies={router.route.replies} {refreshRevision} />
       {/key}
     {:else if router.route.kind === 'user' && routeChain}
       {#key `${routeChain.id}/${router.route.address}`}

@@ -281,3 +281,15 @@ test('keyring tab URLs replace the entry without scrolling while profile navigat
   clickProfileLink(href.keyring(84532, `0x${'56'.repeat(20)}`))
   assert.equal(cursor, index + 1, 'a different account starts a visit')
 })
+
+
+test('reply-count links target reading replies without opening the composer', () => {
+  const pin = '0x' + 'ab'.repeat(32)
+  assert.equal(href.replies(8453, 42n), '/p/8453/42?replies')
+  assert.equal(href.replies(8453, 42n, pin), `/p/8453/42?replies&commit=${pin}`)
+  assert.deepEqual(parse(href.replies(8453, 42n)), { kind: 'thread', chainId: 8453, id: 42n, reply: false, replies: true })
+  assert.deepEqual(parseLocation('/p/8453/42', `?utm_source=x&replies&commit=${pin}`), { kind: 'thread', chainId: 8453, id: 42n, commit: pin, reply: false, replies: true })
+  for (const query of ['?replies&replies', '?replies=bad', '?reply&replies', '?replies&commit=bad']) {
+    assert.equal(parseLocation('/p/8453/42', query).kind, 'unknown', query)
+  }
+})

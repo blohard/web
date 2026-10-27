@@ -9,7 +9,8 @@
 //   #/keys/<chainId>                   activating the connected wallet's account keys
 //   /keys/<chainId>/about              account-key explanation and fees
 //   /about[?section=<name>]            what this is, in plain words
-//   /p/<chainId>/<id>[?reply][&commit=<hash>]  a thread; ?reply lands in the reply box, commit pins the post
+//   /p/<chainId>/<id>[?reply|?replies][&commit=<hash>]  a thread; commit pins the post
+//     ?reply opens the reply box; ?replies reveals the reply list
 //   /u/<chainId>/<address>[/replies|/keys]      a profile: an author's posts and replies, or their keys
 import { getAddress, isAddress, type Address, type Hex } from 'viem'
 import { parsePostReference } from '../../lib/reference-syntax'
@@ -35,7 +36,7 @@ export type Route =
   | { kind: 'settings'; chainId: number }
   | { kind: 'keyring'; chainId: number; address: Address; holders?: boolean }
   | { kind: 'keys'; chainId: number; about?: boolean }
-  | { kind: 'thread'; chainId: number; id: bigint; commit?: Hex; reply: boolean }
+  | { kind: 'thread'; chainId: number; id: bigint; commit?: Hex; reply: boolean; replies?: boolean }
   | { kind: 'user'; chainId: number; address: Address; keys?: boolean; replies?: boolean }
   | { kind: 'unknown'; hash: string }
 
@@ -48,8 +49,8 @@ export function parse(hash: string): Route {
   // Public share URLs may acquire tracking parameters outside the app.
   // Preserve strict parsing of the parameters that carry post semantics.
   const query = hash.startsWith('/')
-    ? [...new URLSearchParams(rawQuery)].filter(([key]) => hash.startsWith('/p/') && (key === 'commit' || key === 'reply'))
-      .map(([key, value]) => key === 'reply' && !value ? 'reply' : `${key}=${encodeURIComponent(value)}`).join('&')
+    ? [...new URLSearchParams(rawQuery)].filter(([key]) => hash.startsWith('/p/') && (key === 'commit' || key === 'reply' || key === 'replies'))
+      .map(([key, value]) => (key === 'reply' || key === 'replies') && !value ? key : `${key}=${encodeURIComponent(value)}`).join('&')
     : rawQuery
   const parts = path.split('/').filter(Boolean)
   if (parts.length === 0) return { kind: 'home' }
@@ -66,10 +67,11 @@ export function parse(hash: string): Route {
   if (hash.startsWith('/p/') && parts.length === 3) {
     const fields = query ? query.split('&') : []
     const reply = fields.includes('reply')
+    const replies = fields.includes('replies')
     const pins = fields.filter((f) => f.startsWith('commit='))
-    if (pins.length > 1 || fields.length !== pins.length + Number(reply)) return { kind: 'unknown', hash }
+    if (pins.length > 1 || (reply && replies) || fields.length !== pins.length + Number(reply) + Number(replies)) return { kind: 'unknown', hash }
     const ref = parsePostReference(`post://${parts[1]}/${parts[2]}${pins.length ? `?${pins[0]}` : ''}`)
-    return ref ? { kind: 'thread', ...ref, reply } : { kind: 'unknown', hash }
+    return ref ? { kind: 'thread', ...ref, reply, ...(replies ? { replies: true } : {}) } : { kind: 'unknown', hash }
   }
   if (hash.startsWith('/u/') && parts[3] === 'keyring' && (parts.length === 4 || (parts.length === 5 && parts[4] === 'holders'))
     && !query && isChainId(parts[1]) && isAddress(parts[2], { strict: false })) {
@@ -134,6 +136,7 @@ export const href = {
   keys: (chainId: number) => at(`#/keys/${chainId}`),
   thread: (chainId: number, id: bigint, commit?: Hex) => at(`/p/${chainId}/${id}${commit ? `?commit=${commit}` : ''}`),
   reply: (chainId: number, id: bigint, commit?: Hex) => at(`/p/${chainId}/${id}?reply${commit ? `&commit=${commit}` : ''}`),
+  replies: (chainId: number, id: bigint, commit?: Hex) => at(`/p/${chainId}/${id}?replies${commit ? `&commit=${commit}` : ''}`),
   userReplies: (chainId: number, address: Address) => at(`/u/${chainId}/${address}/replies`),
   userKeys: (chainId: number, address: Address) => at(`/u/${chainId}/${address}/keys`),
   user: (chainId: number, address: Address) => at(`/u/${chainId}/${address}`),
