@@ -115,13 +115,22 @@ test('a failed later page retains its prefix and resumes after it', async () => 
   } finally { muted.toggle(loud) }
 })
 
-test('twenty-five replies grouped together count as one row, so older posts are still loaded', async () => {
+for (const deleted of [false, true]) test(`paging twenty-five branches with ${deleted ? 'deleted' : 'live'} connecting replies`, async () => {
   const branches = Array.from({ length: 25 }, (_, i) => [feedPost(200 + 2 * i, 100, address('88')), feedPost(201 + 2 * i, 200 + 2 * i)]).flat()
   feedHistory([feedPost(1), feedPost(100), ...branches])
-  for (let i = 0; i < 25; i++) mock.gates.set(BigInt(200 + 2 * i), TOMBSTONE)
-  const page = await loadFeed(mock.chain, { kind: 'timeline', viewer: author })
-  assert.ok(leads(page).includes(1))
-  assert.equal(page.complete, true)
+  if (deleted) for (let i = 0; i < 25; i++) mock.gates.set(BigInt(200 + 2 * i), TOMBSTONE)
+  const filter = { kind: 'timeline', viewer: author }
+  const page = await loadFeed(mock.chain, filter)
+  if (deleted) {
+    assert.equal(page.rows.length, 20, 'disconnected branches count as separate rows')
+    assert.equal(page.complete, false)
+    const more = await olderFeed(mock.chain, filter, 40)
+    assert.ok(leads(more).includes(1))
+    assert.equal(more.complete, true)
+  } else {
+    assert.ok(leads(page).includes(1), 'connected branches count as one row, leaving room for older posts')
+    assert.equal(page.complete, true)
+  }
 })
 
 test('the reader’s reply to an author’s reply stays on the replies tab', async () => {

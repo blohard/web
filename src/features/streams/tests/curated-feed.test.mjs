@@ -113,3 +113,15 @@ for (const stream of ['Curated', 'Following', 'Keyring']) test(`${stream} does n
   assert.equal(page.rows[0].root.omitted, false, 'the immediate parent explains the active branch')
   assert.deepEqual(page.rows[2].cards, [])
 })
+
+test('Everyone ranks a disconnected branch separately from the reader’s old post', async () => {
+  const everyone = { kind: 'timeline', viewer: author }
+  feedHistory([feedPost(1), feedPost(2, 1, stranger, author),
+    feedPost(3, 2, stranger, stranger), feedPost(4),
+    feedPost(5, 3, author, stranger), feedPost(6, 5, stranger, author)])
+  const page = await feed.loadFeed(mock.chain, everyone)
+  assert.deepEqual(page.rows.map(r => r.root.id), [3n, 4n, 1n])
+  assert.deepEqual(page.rows.map(r => r.activity.id), [6n, 4n, 2n])
+  assert.deepEqual(page.rows[0].cards.map(c => c.post.id), [5n, 6n])
+  assert.deepEqual(page.rows[2].cards.map(c => c.post.id), [2n], 'a directly connected reply still belongs to its parent')
+})

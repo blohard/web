@@ -96,9 +96,10 @@ test('deleted inlined replies occupy no group slots; deleted ancestors survive o
   feedHistory(posts)
   for (const id of [1n, 2n, 4n, 6n]) mock.gates.set(id, TOMBSTONE)
   const page = await loadFeed(mock.chain, { kind: 'timeline', viewer: author })
-  assert.deepEqual(ids(page.rows.map((r) => r.lead)), [3])
-  assert.deepEqual(ids(page.rows[0].cards.map((c) => c.post)), [3, 4, 5], 'the newest three, a deleted ancestor among them as context')
-  assert.deepEqual(page.rows[0].cards.map((c) => c.gap), [false, true, false], 'the deleted 4 links to the deleted 2 it answers')
+  assert.deepEqual(ids(page.rows.map((r) => r.lead)), [5, 3])
+  assert.deepEqual(page.rows.map(r => r.root.id), [4n, 1n], 'only each live branch’s immediate deleted parent supplies context')
+  assert.deepEqual(page.rows.map(r => ids(r.cards.map(c => c.post))), [[5], [3]])
+  assert.deepEqual(page.rows.map(r => r.cards[0].gap), [false, false])
   // Once the last live descendant is deleted, its entire deleted branch goes.
   gateChanged(5n, TOMBSTONE, 7n)
   const refreshed = await loadFeed(mock.chain, { kind: 'timeline', viewer: author })
@@ -208,12 +209,13 @@ test('a muted reply to the reader’s post leaves the post standing, and stays o
     const page = await counted(loadFeed(mock.chain, { kind: 'timeline', viewer: author }))
     assert.deepEqual(ids(page.rows.map((r) => r.lead)), [1], 'the reader’s post stands; the muted reply and the muted post are gone')
     assert.equal(page.counts.get(1n), 1, 'the reply still counts')
-    // The reader answers the muted reply: the reply stays as the context between the post and the answer.
+    // The reader answers the muted reply: it supplies context without promoting the original post.
     feedHistory([feedPost(1), feedPost(2, 1, loud), feedPost(3, 0, loud), feedPost(4, 2)])
     const answered = await loadFeed(mock.chain, { kind: 'timeline', viewer: author })
-    assert.deepEqual(ids(answered.rows.map((r) => r.lead)), [2])
-    assert.equal(answered.rows[0].lead.parentId, 1n)
-    assert.deepEqual(ids(answered.rows[0].cards.slice(1).map((c) => c.post)), [4])
+    assert.deepEqual(ids(answered.rows.map((r) => r.lead)), [4, 1])
+    assert.deepEqual(answered.rows.map(r => r.root.id), [2n, 1n])
+    assert.deepEqual(ids(answered.rows[0].cards.map((c) => c.post)), [4])
+    assert.deepEqual(answered.rows[1].cards, [])
   } finally {
     muted.toggle(loud)
   }
@@ -239,7 +241,9 @@ test('a deleted post or reply whose only surviving replier is muted leaves with 
   } finally {
     muted.toggle(loud)
   }
-  assert.deepEqual(ids((await loadFeed(mock.chain, filter)).rows.map((r) => r.lead)), [4, 2].sort((a, b) => b - a), 'unmuted, both replies return with their deleted context')
+  const unmuted = await loadFeed(mock.chain, filter)
+  assert.deepEqual(ids(unmuted.rows.map(r => r.lead)), [5, 3, 2], 'unmuted replies return without joining across deleted parents')
+  assert.deepEqual(unmuted.rows.map(r => r.root.id), [4n, 3n, 1n])
 })
 
 test('a feed opened for the first time brings the shared ledger up to its head before selecting', async () => {

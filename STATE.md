@@ -199,8 +199,8 @@ ancestors.
 
 Every Home stream shows a displayed reply's immediate parent as context, regardless
 of whom the reader follows or whether a wallet is connected. Context does not
-select that parent's other replies or recursively add its ancestors. Following
-and Keyring group through selected records only; an unselected parent is the
+select that parent's other replies or recursively add its ancestors. All Home
+streams group through selected records only; an unselected parent is the
 context root of a separate group, so its replies cannot promote a distant selected
 ancestor. Directly connected conversations still rank by their newest selected reply.
 On load or refresh, all Home streams preview only replies newer than the

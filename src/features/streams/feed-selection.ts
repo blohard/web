@@ -12,7 +12,7 @@ export function selectConversations(filter: Filter, records: {
 }) {
   const { context, parents, eligibleIds, ended } = records
   const groupingIds = new Set(eligibleIds)
-  // Filtered home streams group only selected records. prepareRow adds their
+  // Home streams group only selected records. prepareRow adds their
   // immediate parent context without bridging to a distant selected ancestor.
   if (!groupsSelectedOnly(filter)) for (const id of [...groupingIds]) {
     let parent = parents.get(id)?.parentId

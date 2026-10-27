@@ -426,11 +426,10 @@ test('Everyone keeps immediate parent context for a recent nested reply', async 
 })
 
 
-test('Everyone preserves an explicitly opened context card after its selected child folds', async () => {
+test('Everyone preserves an explicitly opened parent card after its child folds', async () => {
   curate([author])
-  const other = address('88')
   const filter = { kind: 'timeline', viewer: author }
-  const history = [feedPost(1, 0, other), feedPost(2, 1, other), feedPost(3, 2)]
+  const history = [feedPost(1), feedPost(2, 1), feedPost(3, 2)]
   feedHistory(history)
   const initial = await loadFeed(mock.chain, filter)
   assert.deepEqual(ids(initial.rows[0].cards.map(c => c.post)), [2, 3])
@@ -498,9 +497,9 @@ for (const includeRepliesToViewer of [false, true]) test(`${includeRepliesToView
 })
 
 
-test('Curated keeps an opened context branch separate from a newer sibling branch', async () => {
+for (const curatedOnly of [false, true]) test(`${curatedOnly ? 'Curated' : 'Everyone'} keeps an opened context branch separate from a newer sibling branch`, async () => {
   curate([author])
-  const other = address('88'), filter = { kind: 'timeline', curatedOnly: true, viewer: author }
+  const other = address('88'), filter = { kind: 'timeline', curatedOnly, viewer: author }
   const history = [feedPost(1, 0, other), feedPost(2, 1, other), feedPost(3, 2)]
   feedHistory(history)
   const initial = await loadFeed(mock.chain, filter)
