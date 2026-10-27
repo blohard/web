@@ -15,7 +15,7 @@
   import type { Page } from './feed'
   import { Resource } from '../../shared/resource.svelte'
   import { href, plainClick, router } from '../navigation/router.svelte'
-  import { threadView } from './thread-view'
+  import { provideThreadOpener, threadView } from './thread-view'
   import type { ChainInfo, Posted, MessageRecord } from '../../lib/types'
   import type { RowExpansion } from './stream-expansion'
   import InlineReply from '../publishing/InlineReply.svelte'
@@ -113,9 +113,9 @@
     return row.depthFirst ? branchOrder(live) : live
   }
 
-  function openContext(event: MouseEvent, id: bigint) {
-    if (!plainClick(event) || router.embed) return
-    event.preventDefault()
+  provideThreadOpener(openThread)
+
+  function openThread(id: bigint) {
     const preview = [
       ...(parent && !row.root.omitted ? [parent] : []),
       ...(keepPreview && !hidden && !branchReady ? displayPreview(cards).posts : []),
@@ -124,6 +124,12 @@
     const branches = rowx.inherit(id, preview)
     router.go(href.thread(chain.id, id))
     threadView(chain, id, branches)
+  }
+
+  function openContext(event: MouseEvent, id: bigint) {
+    if (!plainClick(event) || router.embed) return
+    event.preventDefault()
+    openThread(id)
   }
 
   function remainingPreview(posts: Posted[], context = rootId, connected = false): PreviewLayout {

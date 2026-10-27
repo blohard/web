@@ -22,7 +22,8 @@
   import { cardBody } from './card-body.svelte'
   import { muted } from '../../lib/muted.svelte'
   import { people } from '../../lib/people'
-  import { href, router } from '../navigation/router.svelte'
+  import { href, plainClick, router } from '../navigation/router.svelte'
+  import { threadOpener } from '../streams/thread-view'
   import type { ChainInfo, Posted } from '../../lib/types'
   import Loading from '../../shared/Loading.svelte'
   import Avatar from '../../components/Avatar.svelte'
@@ -89,6 +90,7 @@
   } = $props()
 
   const selection = untrack(messageSelection)
+  const openFromStream = untrack(threadOpener)
 
   type Details = { timestamp: number; body: Body }
 
@@ -144,13 +146,26 @@
   let showsContent = $derived(!hostBlocked && !ended && !collapsed && !folded && !checkingGate)
   let connects = $derived(connector && (expanded || !after || showsContent))
 
+  function openLink(event: MouseEvent) {
+    const link = (event.target as HTMLElement).closest('a')
+    if (!openFromStream || !plainClick(event) || event.defaultPrevented || router.embed || link?.target || link?.hasAttribute('download')) return
+    event.preventDefault()
+    openFromStream(msg.id)
+  }
+
   /** Clicks on the row itself open the thread; links, buttons and text selection keep their own meaning. */
   function open(e: MouseEvent) {
     if (!linkToThread) return
     const t = e.target as HTMLElement
-    if (t.closest('a, button, input, textarea, select, img, .post-reply-rule')) return
+    const link = t.closest('a')
+    if (link) {
+      if (link.getAttribute('href') === thread) openLink(e)
+      return
+    }
+    if (t.closest('button, input, textarea, select, img, .post-reply-rule')) return
     if (window.getSelection()?.toString()) return
-    router.go(thread)
+    if (openFromStream && !router.embed) openFromStream(msg.id)
+    else router.go(thread)
   }
 
 </script>
@@ -186,7 +201,7 @@
         {:else}
           hidden because the author no longer accepts replies from <a href={href.user(chain.id, msg.author)}><Name address={msg.author} /></a>
         {/if}
-        · <a class="dim" href={thread} aria-label={`open post #${msg.id}`}>#{msg.id}</a>
+        · <a class="dim" href={thread} aria-label={`open post #${msg.id}`} onclick={openLink}>#{msg.id}</a>
         {#if !ended}<button class="small" onclick={() => (revealed = true)}>show</button>{/if}
         {#if !ended && (replyCount === null || replyCount || expanded || onhide)}<div class="actions">{@render replyControl()}</div>{/if}
       </div>

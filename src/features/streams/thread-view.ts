@@ -1,5 +1,6 @@
-// A thread visit owns its choices. A stream context link can seed a new visit
+// A thread visit owns its choices. A stream conversation can seed a new visit
 // with a detached copy before the thread mounts; Back reuses the existing view.
+import { getContext, setContext } from 'svelte'
 import type { ChainInfo, MessageRecord } from '../../lib/types'
 import { router } from '../navigation/router.svelte'
 import type { ReplyViews } from './stream-expansion'
@@ -11,3 +12,10 @@ export function threadView(chain: ChainInfo, id: bigint, branches: ReplyViews = 
     ancestors: [], branches, repliesOpen: true, openAncestors: {},
   }))
 }
+
+const OPEN_THREAD = Symbol('stream-thread-opener')
+type ThreadOpener = (id: bigint) => void
+
+/** Every card in a stream conversation, including loaded branches, shares its handoff. */
+export function provideThreadOpener(open: ThreadOpener): void { setContext(OPEN_THREAD, open) }
+export function threadOpener(): ThreadOpener | undefined { return getContext(OPEN_THREAD) }
