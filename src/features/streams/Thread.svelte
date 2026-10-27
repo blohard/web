@@ -30,6 +30,7 @@
 
   const saved = untrack(() => threadView(chain, id))
   const returning = visitReturning()
+  const initialRevision = untrack(() => refreshRevision)
   const box = untrack(() => replying.box())
 
   let repliesLoading = $state(false)
@@ -116,8 +117,8 @@
 
   type Page = { root: RecordImage; parent: RecordImage | null; replies: ReplyPage; closed: boolean }
 
-  async function load(id: bigint, _reloadRevision: number): Promise<Page> {
-    const { record: root, gate, parent, replies } = await readThread(chain, id, commit)
+  async function load(id: bigint, revision: number): Promise<Page> {
+    const { record: root, gate, parent, replies } = await readThread(saved.sessions, chain, id, commit, returning && revision === initialRevision)
     const ending = endingOf(gate)
     return { root, parent, replies, closed: ending !== null }
   }

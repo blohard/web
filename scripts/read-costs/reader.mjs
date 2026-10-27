@@ -14,6 +14,7 @@ const realFetch = globalThis.fetch
 try {
   const load = (name) => vite.ssrLoadModule(`/src/${name}`)
   const { loadFeed } = await load('features/streams/feed.ts')
+  const sessions = new Map()
   const { readThread, replySlice } = await load('features/streams/replies.ts')
   const { gates } = await load('lib/gates.svelte.ts')
   const status = await (await realFetch(`${config.site}/api/status`)).json()
@@ -49,7 +50,7 @@ try {
       if (rows.some((r) => !page.counts.has(r.lead.id))) throw new Error('feed counts did not finish')
     } else {
       const id = BigInt(config.thread)
-      const page = await readThread(chain, id)
+      const page = await readThread(sessions, chain, id)
       const slice = await replySlice(chain, page.replies, id, 20)
       ready = performance.now() - start
       if (slice.list.length !== 20 || slice.total !== 20) throw new Error('unexpected fixture thread shape')

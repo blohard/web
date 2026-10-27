@@ -10,7 +10,7 @@
   import { watchHostPolicy } from '../../lib/host-policy'
   import { host } from '../../lib/host.svelte'
   import { gates } from '../../lib/gates.svelte'
-  import { readRoot, type ReplyPage } from '../streams/replies'
+  import { readRoot, type ReplyPage, type ReplySessions } from '../streams/replies'
   import { href } from '../navigation/router.svelte'
   import type { ChainInfo } from '../../lib/types'
   import mark from '../../assets/whale-mark.jpg'
@@ -24,13 +24,15 @@
 
   type Page = { chain: ChainInfo; replies: ReplyPage; ending: Ending; deactivated: boolean; closed: boolean }
 
+  const sessions: ReplySessions = new Map()
+
   async function load(_v: number): Promise<Page> {
     if (!Number.isInteger(chainId) || id === null) throw new Error('the widget link needs a valid chain and post')
     const status = await getStatus()
     host.status = status
     const chain = status.chains.find((c) => c.id === chainId)
     if (!chain) throw new Error('this host does not serve the requested chain')
-    const { record: m, gate, replies } = await readRoot(chain, id)
+    const { record: m, gate, replies } = await readRoot(sessions, chain, id)
     return { chain, replies, ending: endingOf(gate), closed: isClosedReplyRule(chain, gate, gates.author(chain, m.author)), deactivated: isDeactivated(gate, gates.author(chain, m.author)) }
   }
   const discussion = embedDiscussion(load)

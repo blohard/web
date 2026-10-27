@@ -105,13 +105,14 @@ for (const size of [2, 20, 25]) test(`a retained branch with ${size} replies mer
   const f = filter(), history = [feedPost(1), ...Array.from({ length: size }, (_, i) => feedPost(i + 2, 1))]
   feedHistory(history)
   await counted(feed.loadFeed(mock.chain, f))
-  new RowExpansion(expansionOf(feed.feedKey(mock.chain, f)), 1n).press(1n)
-  const root = await readRoot(mock.chain, 1n)
+  const row = new RowExpansion(expansionOf(feed.feedKey(mock.chain, f)), 1n)
+  row.press(1n)
+  const root = await readRoot(row.sessions, mock.chain, 1n)
   await replySlice(mock.chain, root.replies, 1n, 20)
   const mine = size + 2, unrelated = size + 3
   feedHistory([...history, feedPost(mine, 1), feedPost(unrelated, 1, address('33'))])
   await feed.acceptPublication(mock.chain, BigInt(mine), 1n)
-  const reopened = await readRoot(mock.chain, 1n, true)
+  const reopened = await readRoot(row.sessions, mock.chain, 1n, true)
   const first = await replySlice(mock.chain, reopened.replies, 1n, 20)
   assert.equal(first.total, size + 2)
   assert.equal(ids(first.list).includes(mine), size <= 20)
@@ -280,7 +281,7 @@ for (const kind of ['timeline', 'curated', 'following', 'profile']) test(`${kind
   if (kind === 'timeline') {
     const row = new RowExpansion(expansionOf(feed.feedKey(mock.chain, f)), 1n)
     row.press(1n); row.shown.add(1n)
-    const root = await readRoot(mock.chain, 1n)
+    const root = await readRoot(row.sessions, mock.chain, 1n)
     await replySlice(mock.chain, root.replies, 1n, 20)
   }
   posts.push(feedPost(2))
@@ -350,7 +351,7 @@ for (const kind of ['timeline', 'curated', 'following']) test(`${kind} posting d
   posts.push(feedPost(2, 1, other, author), feedPost(3, 1))
   feedHistory(posts)
   assert.equal(await feed.peekFeed(mock.chain, f), 1, 'the other reply is new before the list loads')
-  const root = await readRoot(mock.chain, 1n)
+  const root = await readRoot(row.sessions, mock.chain, 1n)
   const shown = await replySlice(mock.chain, root.replies, 1n, 20)
   assert.deepEqual(ids(shown.list), [2, 3])
   await feed.acceptPublication(mock.chain, 3n, 1n)
@@ -359,4 +360,26 @@ for (const kind of ['timeline', 'curated', 'following']) test(`${kind} posting d
   posts.push(feedPost(4, 1, other, author))
   feedHistory(posts)
   assert.equal(await feed.peekFeed(mock.chain, f), 1, 'a later reply still cues normally')
+})
+
+test('an own reply updates an off-screen row without touching the same post in the mounted stream', async t => {
+  const following = { kind: 'following', authors: [author], viewer: author, includeRepliesToViewer: true }
+  const everyone = { kind: 'timeline', viewer: author }
+  feedHistory([feedPost(1)])
+  const rows = []
+  for (const f of [following, everyone]) {
+    await counted(feed.loadFeed(mock.chain, f))
+    const row = new RowExpansion(expansionOf(feed.feedKey(mock.chain, f)), 1n)
+    row.press(1n)
+    const root = await readRoot(row.sessions, mock.chain, 1n)
+    await replySlice(mock.chain, root.replies, 1n, 20)
+    rows.push(row)
+  }
+  t.after(mountFeed(mock.chain, following))
+  feedHistory([feedPost(1), feedPost(2, 1), feedPost(3, 1, address('33'))])
+  await feed.acceptPublication(mock.chain, 2n, 1n)
+  for (const [i, row] of rows.entries()) {
+    const root = await readRoot(row.sessions, mock.chain, 1n, true)
+    assert.deepEqual(ids((await replySlice(mock.chain, root.replies, 1n, 20)).list), i === 0 ? [] : [2])
+  }
 })

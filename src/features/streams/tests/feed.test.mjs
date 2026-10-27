@@ -9,7 +9,8 @@ const { loadFeed, resumeFeed, feedCue, peekFeed } = await load('features/streams
 const { withInlined, drawnReplies } = await load('features/streams/conversation.ts')
 const { gates: ledger } = await load('lib/gates.svelte.ts')
 
-beforeEach(install)
+const sessions = new Map()
+beforeEach(() => { sessions.clear(); install() })
 after(teardown)
 
 test('inlined replies to one post form one group, placed by its newest member', () => {
@@ -769,14 +770,14 @@ test('an expired snapshot keeps its refresh cue across a return and refresh reco
 test('an open stream branch resumes its existing replies without silently refreshing', async () => {
   const { readRoot, replySlice } = await load('features/streams/replies.ts')
   feedHistory([feedPost(1), feedPost(2, 1)])
-  const first = await readRoot(mock.chain, 1n)
+  const first = await readRoot(sessions, mock.chain, 1n)
   assert.deepEqual(ids((await replySlice(mock.chain, first.replies, 1n, 20)).list), [2])
   feedHistory([feedPost(1), feedPost(2, 1), feedPost(3, 1)])
   mock.calls.length = 0
-  const returned = await readRoot(mock.chain, 1n, true)
+  const returned = await readRoot(sessions, mock.chain, 1n, true)
   assert.deepEqual(ids((await replySlice(mock.chain, returned.replies, 1n, 20)).list), [2])
   assert.equal(mock.calls.length, 0)
-  const refreshed = await readRoot(mock.chain, 1n)
+  const refreshed = await readRoot(sessions, mock.chain, 1n)
   assert.deepEqual(ids((await replySlice(mock.chain, refreshed.replies, 1n, 20)).list), [2, 3])
 })
 

@@ -29,10 +29,22 @@ export type ReplyPage = {
   session: Session
 }
 export type ReplySlice = { list: api.RecordImage[]; loaded: number; tailStart: bigint | null; children: ReplyPage; total: number; more: boolean }
-const sessions = new Map<string, Session>()
+/** Retained by one stream row, thread visit, or embedded discussion. */
+export type ReplySessions = Map<string, Session>
 const sessionKey = (chain: ChainInfo, root: bigint) => `${chain.id}/${chain.contract.toLowerCase()}/${root}`
 const blankSession = (): Session => ({ at: null, records: new Map(), branches: new Map(), refreshing: null, queue: new SerialQueue() })
-function sessionFor(chain: ChainInfo, root: bigint): Session {
+/** Copy completed reads for another visit; outstanding work stays with its original owner. */
+export function copyReplySessions(sessions: ReplySessions): ReplySessions {
+  return new Map([...sessions].map(([key, s]) => [key, {
+    at: s.at, records: new Map(s.records), refreshing: null, queue: new SerialQueue(),
+    branches: new Map([...s.branches].map(([id, b]) => [id, {
+      ids: new Set(b.ids), started: b.started, next: b.next, ceiling: b.ceiling,
+      shown: b.shown, revealed: new Set(b.revealed), queue: new SerialQueue(),
+    }])),
+  }]))
+}
+
+function sessionFor(sessions: ReplySessions, chain: ChainInfo, root: bigint): Session {
   const key = sessionKey(chain, root)
   let s = sessions.get(key)
   if (!s) {
@@ -96,8 +108,8 @@ function refresh(chain: ChainInfo, s: Session): Promise<void> {
 }
 
 /** Fresh facade, shared session: a new page cues components without replacing branch data. */
-async function root(chain: ChainInfo, id: bigint, ancestors: number, pin?: Hex, resume = false) {
-  const s = sessionFor(chain, id)
+async function root(sessions: ReplySessions, chain: ChainInfo, id: bigint, ancestors: number, pin?: Hex, resume = false) {
+  const s = sessionFor(sessions, chain, id)
   return s.queue.run(async () => {
     try {
       if (s.at) {
@@ -172,8 +184,8 @@ async function open(chain: ChainInfo, s: Session, id: bigint, ancestors: number,
   const gate = gates.message(chain, id) ?? record.gate
   return { record, gate, replies: pageOf(s), parent: answer.ancestors[0] ?? null }
 }
-export const readRoot = (chain: ChainInfo, id: bigint, resume = false) => root(chain, id, 0, undefined, resume)
-export const readThread = (chain: ChainInfo, id: bigint, pin?: Hex) => root(chain, id, 1, pin)
+export const readRoot = (sessions: ReplySessions, chain: ChainInfo, id: bigint, resume = false) => root(sessions, chain, id, 0, undefined, resume)
+export const readThread = (sessions: ReplySessions, chain: ChainInfo, id: bigint, pin?: Hex, resume = false) => root(sessions, chain, id, 1, pin, resume)
 
 /** Earlier context joins this thread's session, so its counts survive Back and follow refreshes. */
 export function readEarlier(chain: ChainInfo, page: ReplyPage, id: bigint, limit: number): Promise<api.RecordImage[]> {
@@ -274,7 +286,7 @@ export function replySlice(chain: ChainInfo, page: ReplyPage, parent: bigint, li
 }
 
 /** Update retained stream branches without opening them or crossing a paging gap. */
-export async function acceptReply(chain: ChainInfo, roots: Iterable<bigint>, at: api.At, record: api.RecordImage, parent?: api.RecordImage): Promise<void> {
+export async function acceptReply(sessions: ReplySessions, chain: ChainInfo, roots: Iterable<bigint>, at: api.At, record: api.RecordImage, parent?: api.RecordImage): Promise<void> {
   if (record.parentId === 0n || endingOf(record.gate)) return
   await Promise.all([...roots].map(async root => {
     const s = sessions.get(sessionKey(chain, root))
@@ -302,7 +314,7 @@ export async function acceptReply(chain: ChainInfo, roots: Iterable<bigint>, at:
  * A stream's cue counts new replies inside its open conversations with this,
  * in the same poll as the stream itself.
  */
-export function completeBranches(chain: ChainInfo, roots: Iterable<bigint>, mounted: ReadonlySet<bigint>): Map<bigint, ReadonlySet<bigint>> {
+export function completeBranches(sessions: ReplySessions, chain: ChainInfo, roots: Iterable<bigint>, mounted: ReadonlySet<bigint>): Map<bigint, ReadonlySet<bigint>> {
   const out = new Map<bigint, ReadonlySet<bigint>>()
   for (const root of roots) {
     const s = sessions.get(sessionKey(chain, root))

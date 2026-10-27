@@ -34,7 +34,9 @@ const collect = async (from, limit) => {
   return out
 }
 
+const sessions = new Map()
 beforeEach(() => {
+  sessions.clear()
   install()
   at = { generation, sequence: '20', checkpoint: { block: '100', hash: hash('ac') } }
   events = []
@@ -187,8 +189,8 @@ test('quoting captures the accepted record shown, and pinned thread navigation r
   assert.deepEqual(await quoteOf(mock.chain, shown), { chainId: mock.chain.id, id: 3n, commit: shown.commitment })
   await assert.rejects(quoteOf(mock.chain, { ...shown, author: address('ef') }), /no longer matches/)
   await assert.rejects(quoteOf(mock.chain, { ...shown, contentHash: hash('ef') }), /no longer matches/)
-  await assert.rejects(readThread(mock.chain, 3n, hash('ff')), /commitment/)
-  const valid = await readThread(mock.chain, 3n, shown.commitment)
+  await assert.rejects(readThread(sessions, mock.chain, 3n, hash('ff')), /commitment/)
+  const valid = await readThread(sessions, mock.chain, 3n, shown.commitment)
   assert.equal(valid.record.commitment, shown.commitment)
 })
 
@@ -350,7 +352,7 @@ test('a branch whose first reply page predates the gate baseline reads it once m
     if (url.pathname.endsWith('/replies') && ++pages === 1) { started.resolve(); await held.promise }
     return answer
   }
-  const opening = readRoot(mock.chain, 1n)
+  const opening = readRoot(sessions, mock.chain, 1n)
   await Promise.race([started.promise, new Promise((_, reject) => setTimeout(() => reject(new Error('the branch never read a reply page')), 2000).unref())])
   at = { ...at, sequence: '21', checkpoint: { block: '101', hash: hash('ac') } }
   await gates.ensureAuthor(mock.chain, address('aa'))
@@ -376,7 +378,7 @@ for (const view of ['thread', 'branch']) test(`a first ${view} read goes out wit
   const { readThread, readRoot } = await load('features/streams/replies.ts')
   await getMessage(mock.chain, 2n) // the ledger now has a position to advance from
   const changes = holdOn((path) => path.endsWith('/changes'))
-  const opening = view === 'thread' ? readThread(mock.chain, 3n) : readRoot(mock.chain, 3n)
+  const opening = view === 'thread' ? readThread(sessions, mock.chain, 3n) : readRoot(sessions, mock.chain, 3n)
   for (let i = 0; i < 5; i++) await new Promise(setImmediate)
   const first = view === 'thread' ? '/message/3' : '/replies'
   assert.ok(changes.seen.some((p) => p.endsWith(first)), 'the first read waited for the advance')
@@ -387,7 +389,7 @@ for (const view of ['thread', 'branch']) test(`a first ${view} read goes out wit
 const opens = { thread: '/message/3', branch: '/replies' }
 const openView = async (view) => {
   const { readThread, readRoot } = await load('features/streams/replies.ts')
-  return view === 'thread' ? readThread(mock.chain, 3n) : readRoot(mock.chain, 3n)
+  return view === 'thread' ? readThread(sessions, mock.chain, 3n) : readRoot(sessions, mock.chain, 3n)
 }
 
 for (const view of ['thread', 'branch']) for (const first of ['root', 'changes']) test(`whichever answers first, a ${view}'s root applies after the ledger's advance (${first} first)`, async () => {
@@ -412,10 +414,10 @@ test('a failed advance or root read is the failure reported, and nothing is appl
   const normal = send
   for (const [failing, status] of [['/changes', 503], ['/message/3', 502]]) {
     send = async (url, init) => url.pathname.endsWith(failing) ? response({ error: 'unavailable' }, status) : normal(url, init)
-    await assert.rejects(readThread(mock.chain, 3n), (e) => e instanceof api.ApiError && e.status === status, failing)
+    await assert.rejects(readThread(sessions, mock.chain, 3n), (e) => e instanceof api.ApiError && e.status === status, failing)
   }
   send = normal
-  assert.equal((await readThread(mock.chain, 3n)).record.id, 3n, 'the next open reads it')
+  assert.equal((await readThread(sessions, mock.chain, 3n)).record.id, 3n, 'the next open reads it')
 })
 
 for (const view of ['thread', 'branch']) for (const lost of ['expired history', 'a rebuild']) test(`a first ${view} read overlapping ${lost} opens from the host's current history`, async () => {
@@ -731,7 +733,7 @@ const replyRequests = () => calls.filter((c) => c.url.pathname.endsWith('/replie
 test('thread entry reads its parent and counts together; only an opened branch is fetched', async () => {
   threadRows(2)
   addPost(4, 2)
-  const root = await readThread(mock.chain, 2n)
+  const root = await readThread(sessions, mock.chain, 2n)
   assert.equal(root.parent.id, 1n)
   assert.equal(root.replies.counts.get(2n), 1)
   assert.equal(calls.length, 1)
@@ -743,7 +745,7 @@ test('thread entry reads its parent and counts together; only an opened branch i
 
 test('thread pages append by cursor and a refresh retains the complete branch', async () => {
   threadRows(40)
-  const first = await readThread(mock.chain, 1n)
+  const first = await readThread(sessions, mock.chain, 1n)
   const one = await replySlice(mock.chain, first.replies, 1n, 20)
   assert.equal(one.list.length, 20)
   assert.equal(one.more, true)
@@ -751,7 +753,7 @@ test('thread pages append by cursor and a refresh retains the complete branch', 
   assert.equal(two.list.length, 40)
   assert.equal(two.more, false)
   addPost(42, 1)
-  const updated = await readThread(mock.chain, 1n)
+  const updated = await readThread(sessions, mock.chain, 1n)
   const three = await replySlice(mock.chain, updated.replies, 1n, 41)
   assert.deepEqual(three.list.slice(0, 40), two.list)
   assert.equal(three.list.at(-1).id, 42n)
@@ -761,7 +763,7 @@ test('thread pages append by cursor and a refresh retains the complete branch', 
 
 test('a failed thread page retries its cursor without losing displayed rows', async () => {
   threadRows(40)
-  const root = await readThread(mock.chain, 1n)
+  const root = await readThread(sessions, mock.chain, 1n)
   const first = await replySlice(mock.chain, root.replies, 1n, 20)
   const normal = send
   send = (url, init) => url.pathname.endsWith('/replies') ? response({ error: 'index_unavailable' }, 503) : normal(url, init)
@@ -775,7 +777,7 @@ test('a failed thread page retries its cursor without losing displayed rows', as
 
 test('a refresh adds to a branch whose first page is still in flight', async () => {
   threadRows(2)
-  const root = await readThread(mock.chain, 1n)
+  const root = await readThread(sessions, mock.chain, 1n)
   const normal = send, started = deferred(), held = deferred()
   send = async (url, init) => {
     const answer = await normal(url, init)
@@ -785,7 +787,7 @@ test('a refresh adds to a branch whose first page is still in flight', async () 
   const reading = replySlice(mock.chain, root.replies, 1n, 20)
   await started.promise
   addPost(4, 1)
-  await readThread(mock.chain, 1n)
+  await readThread(sessions, mock.chain, 1n)
   held.resolve()
   const slice = await reading
   assert.deepEqual(slice.list.map((r) => r.id), [2n, 3n, 4n])
@@ -795,7 +797,7 @@ test('a refresh adds to a branch whose first page is still in flight', async () 
 
 test('a branch opened during a captured refresh starts its snapshot after that refresh', async () => {
   threadRows(2)
-  const root = await readThread(mock.chain, 1n)
+  const root = await readThread(sessions, mock.chain, 1n)
   await replySlice(mock.chain, root.replies, 1n, 20)
   const normal = send, started = deferred(), held = deferred()
   send = async (url, init) => {
@@ -803,7 +805,7 @@ test('a branch opened during a captured refresh starts its snapshot after that r
     if (url.pathname.endsWith('/changes')) { started.resolve(); await held.promise }
     return answer
   }
-  const refresh = readThread(mock.chain, 1n)
+  const refresh = readThread(sessions, mock.chain, 1n)
   await started.promise
   const opening = replySlice(mock.chain, root.replies, 2n, 20)
   await new Promise((r) => setImmediate(r))
@@ -816,7 +818,7 @@ test('a branch opened during a captured refresh starts its snapshot after that r
 
 test('thread polling excludes deleted replies, removals and unopened branches, and changes no rows', async () => {
   threadRows(2)
-  const root = await readThread(mock.chain, 1n)
+  const root = await readThread(sessions, mock.chain, 1n)
   const first = await replySlice(mock.chain, root.replies, 1n, 20)
   addPost(4, 1)
   addPost(5, 2)
@@ -829,7 +831,7 @@ test('thread polling excludes deleted replies, removals and unopened branches, a
   assert.equal(await peekReplies(mock.chain, root.replies, [1n, 2n]), 1)
   assert.deepEqual(first.list.map((r) => r.id), [2n, 3n])
   assert.equal(gates.message(mock.chain, 6n), undefined, 'a quiet poll never publishes gates')
-  const updated = await readThread(mock.chain, 1n)
+  const updated = await readThread(sessions, mock.chain, 1n)
   const next = await replySlice(mock.chain, updated.replies, 1n, 20)
   assert.deepEqual(next.list.map((r) => r.id), [2n, 3n, 4n])
   assert.equal(replyRequests().length, 1)
@@ -837,7 +839,7 @@ test('thread polling excludes deleted replies, removals and unopened branches, a
 
 test('a thread poll carries the reader\'s notifications to a listener without changing its count', async () => {
   threadRows(0)
-  const root = await readThread(mock.chain, 1n)
+  const root = await readThread(sessions, mock.chain, 1n)
   await replySlice(mock.chain, root.replies, 1n, 20)
   addPost(2, 1)
   const reader = address('33'), answers = []
@@ -854,7 +856,7 @@ test('a thread poll carries the reader\'s notifications to a listener without ch
 
 test('incomplete thread branches do not cue replies hidden behind their older pages', async () => {
   threadRows(40)
-  const root = await readThread(mock.chain, 1n)
+  const root = await readThread(sessions, mock.chain, 1n)
   await replySlice(mock.chain, root.replies, 1n, 20)
   addPost(42, 1)
   const before = calls.length
@@ -864,10 +866,10 @@ test('incomplete thread branches do not cue replies hidden behind their older pa
 
 test('an explicit landed reply is reached without refetching the displayed prefix', async () => {
   threadRows(45)
-  const root = await readThread(mock.chain, 1n)
+  const root = await readThread(sessions, mock.chain, 1n)
   await replySlice(mock.chain, root.replies, 1n, 20)
   addPost(47, 1)
-  const updated = await readThread(mock.chain, 1n)
+  const updated = await readThread(sessions, mock.chain, 1n)
   const revealed = await replySlice(mock.chain, updated.replies, 1n, 20, 47n)
   assert.equal(revealed.list.at(-1).id, 47n)
   assert.equal(revealed.more, true)
@@ -1129,7 +1131,7 @@ test('chain selection defaults to Base mainnet but preserves an explicit choice'
 
 test('thread refresh cues stop after one changes page', async () => {
   threadRows(0)
-  const root = await readThread(mock.chain, 1n)
+  const root = await readThread(sessions, mock.chain, 1n)
   await replySlice(mock.chain, root.replies, 1n, 20)
   for (let id = 2; id < 152; id++) addPost(id, 1)
   calls.length = 0
@@ -1143,7 +1145,7 @@ test('thread refresh cues stop after one changes page', async () => {
 
 test('thread quiet polls pass unrelated changes without lighting refresh', async () => {
   threadRows(0)
-  const root = await readThread(mock.chain, 1n)
+  const root = await readThread(sessions, mock.chain, 1n)
   await replySlice(mock.chain, root.replies, 1n, 20)
   for (let id = 2; id < 153; id++) addPost(id, 0)
   for (let i = 0; i < 4; i++) assert.equal(await peekReplies(mock.chain, root.replies, [1n]), 0)
@@ -1154,7 +1156,7 @@ test('thread quiet polls pass unrelated changes without lighting refresh', async
 
 test('an incompletely loaded thread does not make a request solely for notification cues', async () => {
   threadRows(30)
-  const root = await readThread(mock.chain, 1n)
+  const root = await readThread(sessions, mock.chain, 1n)
   const first = await replySlice(mock.chain, root.replies, 1n, 20)
   assert.equal(first.more, true)
   let heard = 0
@@ -1173,18 +1175,18 @@ test('an incompletely loaded thread does not make a request solely for notificat
 
 test('a thread reopened after its index was rebuilt reads afresh, and a failed read keeps the page shown', async () => {
   threadRows(2)
-  const first = await readThread(mock.chain, 1n)
+  const first = await readThread(sessions, mock.chain, 1n)
   await replySlice(mock.chain, first.replies, 1n, 20)
   addPost(4, 1)
   at = { ...at, generation: hash('dd') }
   const normal = send
   send = (url, init) => url.pathname.includes('/message/') ? response({ error: 'index_unavailable' }, 503) : normal(url, init)
-  await assert.rejects(readThread(mock.chain, 1n), /index unavailable/)
+  await assert.rejects(readThread(sessions, mock.chain, 1n), /index unavailable/)
   send = normal
-  const again = await readThread(mock.chain, 1n)
+  const again = await readThread(sessions, mock.chain, 1n)
   assert.notEqual(again.replies.session, first.replies.session, 'a fresh session replaces the old one')
   const slice = await replySlice(mock.chain, again.replies, 1n, 20)
   assert.deepEqual(slice.list.map((r) => r.id), [2n, 3n, 4n])
-  const reopened = await readThread(mock.chain, 1n)
+  const reopened = await readThread(sessions, mock.chain, 1n)
   assert.equal(reopened.replies.session, again.replies.session, 'and is kept from then on')
 })

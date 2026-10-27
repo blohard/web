@@ -7,7 +7,8 @@ const { readMessage } = await load('lib/messages.ts')
 const { readRoot, replySlice } = await load('features/streams/replies.ts')
 const { RowExpansion, expansionOf } = await load('features/streams/stream-expansion.ts')
 const { replying } = await load('features/publishing/replying.svelte.ts')
-beforeEach(install)
+const sessions = new Map()
+beforeEach(() => { sessions.clear(); install() })
 after(teardown)
 
 const post = (id, parent = 0) => feedPost(id, parent, author, author)
@@ -161,7 +162,7 @@ test('context labels own the separator for a root reply and an omitted parent', 
 
 test('nested lists join only the first card, until an editor interrupts that join', async t => {
   const view = await fixture(t, [post(1), post(2, 1), post(3, 1), post(4, 2)])
-  const root = await readRoot(mock.chain, 1n)
+  const root = await readRoot(sessions, mock.chain, 1n)
   const first = await replySlice(mock.chain, root.replies, 1n, 20)
   view.values.set(`${view.prefix}/1`, first)
   view.values.set(`${view.prefix}/2`, await replySlice(mock.chain, first.children, 2n, 20))
@@ -179,7 +180,7 @@ test('nested lists join only the first card, until an editor interrupts that joi
 
 test('a paging gap gives the first displayed reply its own separator', async t => {
   const view = await fixture(t, [post(1), ...Array.from({ length: 23 }, (_, i) => post(i + 2, 1))])
-  const root = await readRoot(mock.chain, 1n)
+  const root = await readRoot(sessions, mock.chain, 1n)
   const slice = await replySlice(mock.chain, root.replies, 1n, 0, 24n)
   assert.equal(slice.tailStart, 24n)
   view.values.set(`${view.prefix}/1`, slice)
@@ -193,7 +194,7 @@ test('a paging gap gives the first displayed reply its own separator', async t =
 
 for (const omitted of [2, 24]) test(`an ancestor's reply list omits focused child #${omitted} and pages only the remaining replies`, async t => {
   const view = await fixture(t, [post(1), ...Array.from({ length: 23 }, (_, i) => post(i + 2, 1))])
-  const root = await readRoot(mock.chain, 1n)
+  const root = await readRoot(sessions, mock.chain, 1n)
   const first = await replySlice(mock.chain, root.replies, 1n, 20)
   view.values.set(`${view.prefix}/1`, first)
   const props = { parentId: 1n, data: root.replies, separator: false, omit: BigInt(omitted) }

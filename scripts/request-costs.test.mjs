@@ -14,7 +14,8 @@ const { savePending, listPending } = await load('features/publishing/pending.ts'
 const { TOMBSTONE } = await load('lib/board.ts')
 const { bodyRecord } = await load('features/publishing/posting.ts')
 const { loadBody } = await load('lib/content.ts')
-beforeEach(install)
+const sessions = new Map()
+beforeEach(() => { sessions.clear(); install() })
 after(teardown)
 
 async function budget(expected, work) {
@@ -73,7 +74,7 @@ for (const [historySize, retained] of [[100, 20], [2000, 200]]) {
 for (const children of [100, 2000]) {
   test(`thread request budget: ${children} direct replies`, async () => {
     feedHistory([feedPost(1), feedPost(2, 1), ...Array.from({ length: children }, (_, i) => feedPost(i + 3, 2))])
-    const root = await budget({ message: 1 }, () => readThread(mock.chain, 2n))
+    const root = await budget({ message: 1 }, () => readThread(sessions, mock.chain, 2n))
     assert.equal(root.parent.id, 1n)
     assert.equal(new URL(mock.calls[0].url, 'https://client.invalid').searchParams.get('ancestors'), '1')
     let slice = await budget({ replies: 1 }, async () => {
@@ -88,7 +89,7 @@ for (const children of [100, 2000]) {
     assert.equal(slice.list.at(-1).id, last)
     assert.equal(slice.list.length, 21, 'reveal does not fill the gap')
     // A refresh answers the root and its parent from the changes it read.
-    const refreshed = await budget({ changes: 1 }, () => readThread(mock.chain, 2n))
+    const refreshed = await budget({ changes: 1 }, () => readThread(sessions, mock.chain, 2n))
     await budget({}, async () => {
       const same = await replySlice(mock.chain, refreshed.replies, 2n, 20)
       assert.deepEqual(same.list.map((r) => r.id), slice.list.map((r) => r.id))

@@ -16,8 +16,7 @@ import { host } from '../../lib/host.svelte'
 import { readHostPolicy } from '../../lib/host-policy'
 import { muted } from '../../lib/muted.svelte'
 import { wallet } from '../../lib/wallet.svelte'
-import { completeBranches, acceptReply } from './replies'
-import { branchOpen, collapsedParents, openRoots, shownParents } from './stream-expansion'
+import { branchOpen, collapsedParents, openRoots, completeStreamBranches, acceptStreamReply } from './stream-expansion'
 import type { ChainInfo, Posted } from '../../lib/types'
 
 export type Page = {
@@ -323,10 +322,7 @@ export async function acceptPublication(chain: ChainInfo, id: bigint, parentId: 
       v.quiet.forget(id)
     }
     if (parent && v.counts.has(parent.id)) v.counts.set(parent.id, parent.replies)
-    // Sessions may be shared with the stream currently on screen. Leave its
-    // branches alone too; that stream's next explicit refresh will update them.
-    const visibleRoots = mounted ? openRoots(mounted.key) : new Set<bigint>()
-    await acceptReply(chain, [...openRoots(key)].filter(root => !visibleRoots.has(root)), at, record, parent)
+    await acceptStreamReply(chain, key, at, record, parent)
   }))])
 }
 
@@ -347,7 +343,7 @@ export async function peekFeed(chain: ChainInfo, filter: Filter, listener?: List
   // Mounting starts the poll alongside the load or resume of its snapshot.
   if (v?.loading) await v.loading.catch(() => {})
   if (!v?.at || v.loading) return null
-  const branches = completeBranches(chain, openRoots(key), shownParents(key))
+  const branches = completeStreamBranches(chain, key)
   const profile = filter.kind === 'author' || filter.kind === 'author-replies'
   const displayed = new Set(profile ? v.selection?.rows.slice(0, v.limit)
     .flatMap(row => [row.root.id, ...row.cards.map(card => card.post.id)]) : [])

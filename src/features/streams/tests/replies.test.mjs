@@ -2,11 +2,12 @@
 // covered with scripted host responses in api.test.mjs.
 import assert from 'node:assert/strict'
 import { after, beforeEach, test } from 'node:test'
-import { load, mock, install, teardown, author, address, feedPost, feedHistory, gateChanged, ids } from '../../../../scripts/host-harness.mjs'
-const { readThread, readRoot, readEarlier, replySlice, acceptReply, peekReplies } = await load('features/streams/replies.ts')
+import { load, mock, install, teardown, author, address, feedPost, feedHistory, gateChanged, ids, deferred } from '../../../../scripts/host-harness.mjs'
+const { readThread, readRoot, readEarlier, replySlice, acceptReply, peekReplies, copyReplySessions } = await load('features/streams/replies.ts')
 const { readMessage } = await load('lib/messages.ts')
 const { TOMBSTONE, REMOVED } = await load('lib/board.ts')
-beforeEach(install)
+const sessions = new Map()
+beforeEach(() => { sessions.clear(); install() })
 after(teardown)
 
 test('grouping a deep conversation uses no recursive stack and preserves ancestor order', async () => {
@@ -21,14 +22,14 @@ test('grouping a deep conversation uses no recursive stack and preserves ancesto
 test('deleted direct replies leave lists and counts while surviving descendants retain context', async () => {
   feedHistory([feedPost(1), feedPost(2, 1), feedPost(3, 2), feedPost(4, 1)])
   mock.gates.set(2n, TOMBSTONE)
-  const root = await readThread(mock.chain, 1n)
+  const root = await readThread(sessions, mock.chain, 1n)
   assert.equal(root.replies.counts.get(1n), 1)
   const direct = await replySlice(mock.chain, root.replies, 1n, 20)
   assert.deepEqual(ids(direct.list), [4])
   assert.equal(direct.total, 1)
   assert.equal(direct.more, false)
   assert.deepEqual(mock.calls.filter((c) => c.method === 'replies').map((c) => c.parent), ['1'])
-  const child = await readThread(mock.chain, 3n)
+  const child = await readThread(sessions, mock.chain, 3n)
   assert.equal(child.parent.id, 2n)
   assert.equal(child.parent.gate, TOMBSTONE, 'a direct visit to the surviving reply retains deleted parent context')
 })
@@ -36,12 +37,12 @@ test('deleted direct replies leave lists and counts while surviving descendants 
 test('moderator removals hide the branch from its parent but preserve direct access', async () => {
   feedHistory([feedPost(1), feedPost(2, 1), feedPost(3, 2)])
   mock.gates.set(2n, REMOVED)
-  const root = await readRoot(mock.chain, 1n)
+  const root = await readRoot(sessions, mock.chain, 1n)
   const direct = await replySlice(mock.chain, root.replies, 1n, 20)
   assert.deepEqual(ids(direct.list), [])
   assert.equal(direct.total, 0)
   assert.equal(direct.more, false)
-  const removed = await readThread(mock.chain, 2n)
+  const removed = await readThread(sessions, mock.chain, 2n)
   assert.equal(removed.gate, REMOVED)
   assert.deepEqual(ids((await replySlice(mock.chain, removed.replies, 2n, 20)).list), [3])
 })
@@ -49,7 +50,7 @@ test('moderator removals hide the branch from its parent but preserve direct acc
 test('ended replies take no page slots and refresh drops them without scanning descendants', async () => {
   feedHistory([feedPost(1), ...Array.from({ length: 25 }, (_, i) => feedPost(i + 2, 1)), feedPost(27, 2)])
   mock.gates.set(2n, TOMBSTONE); mock.gates.set(3n, TOMBSTONE); mock.gates.set(4n, REMOVED)
-  const root = await readThread(mock.chain, 1n)
+  const root = await readThread(sessions, mock.chain, 1n)
   const first = await replySlice(mock.chain, root.replies, 1n, 20)
   assert.equal(first.total, 22)
   assert.equal(first.list.length, 20)
@@ -59,7 +60,7 @@ test('ended replies take no page slots and refresh drops them without scanning d
   assert.equal(more.more, false)
   assert.deepEqual(more.list.slice(0, 20), first.list)
   gateChanged(5n, TOMBSTONE, 28n); gateChanged(6n, REMOVED, 28n)
-  const updated = await readThread(mock.chain, 1n)
+  const updated = await readThread(sessions, mock.chain, 1n)
   const after = await replySlice(mock.chain, updated.replies, 1n, 40)
   assert.equal(after.total, 20)
   assert.equal(after.list.length, 20)
@@ -73,17 +74,17 @@ test('ended replies take no page slots and refresh drops them without scanning d
 
 test('deleting a thread root changes its classification without tearing down its replies', async () => {
   feedHistory([feedPost(1), feedPost(2, 1), feedPost(3, 2)])
-  const first = await readThread(mock.chain, 2n)
+  const first = await readThread(sessions, mock.chain, 2n)
   const branch = await replySlice(mock.chain, first.replies, 2n, 20)
   assert.deepEqual(ids(branch.list), [3])
   gateChanged(2n, TOMBSTONE, 4n)
-  const next = await readThread(mock.chain, 2n)
+  const next = await readThread(sessions, mock.chain, 2n)
   assert.equal(next.gate, TOMBSTONE)
   assert.equal(next.parent.id, 1n, 'live replies still need this context')
   assert.equal(next.replies.session, first.replies.session)
   assert.deepEqual(ids((await replySlice(mock.chain, next.replies, 2n, 20)).list), [3])
   gateChanged(3n, TOMBSTONE, 5n)
-  const empty = await readThread(mock.chain, 2n)
+  const empty = await readThread(sessions, mock.chain, 2n)
   assert.equal(empty.parent.id, 1n, 'the addressed post keeps its own context')
   assert.equal(empty.replies.counts.get(2n), 0)
   assert.deepEqual(ids((await replySlice(mock.chain, empty.replies, 2n, 20)).list), [])
@@ -91,7 +92,7 @@ test('deleting a thread root changes its classification without tearing down its
 
 test('extending the visible prefix appends one page with counts and fetches no nested branches', async () => {
   feedHistory([feedPost(1), ...Array.from({ length: 45 }, (_, i) => feedPost(i + 2, 1))])
-  const root = await readThread(mock.chain, 1n)
+  const root = await readThread(sessions, mock.chain, 1n)
   const first = await replySlice(mock.chain, root.replies, 1n, 20)
   mock.calls = []
   const more = await replySlice(mock.chain, root.replies, 1n, 40)
@@ -105,7 +106,7 @@ test('extending the visible prefix appends one page with counts and fetches no n
 test('deep branches load on demand, reopen from the session, and reveal a new reply in place', async () => {
   const history = Array.from({ length: 102 }, (_, i) => feedPost(i + 1, i))
   feedHistory(history)
-  const root = await readThread(mock.chain, 1n)
+  const root = await readThread(sessions, mock.chain, 1n)
   mock.calls = []
   let page = root.replies
   for (let parent = 1n; parent <= 100n; parent++) {
@@ -123,7 +124,7 @@ test('deep branches load on demand, reopen from the session, and reveal a new re
   assert.equal(mock.calls.length, 0, 'reopening does not fetch the branch again')
 
   feedHistory([...history, feedPost(103, 100)])
-  const refreshed = await readThread(mock.chain, 1n)
+  const refreshed = await readThread(sessions, mock.chain, 1n)
   assert.equal(refreshed.replies.session, root.replies.session)
   const landed = await replySlice(mock.chain, refreshed.replies, 100n, 20, 103n)
   assert.deepEqual(ids(landed.list), [101, 103])
@@ -133,7 +134,7 @@ test('deep branches load on demand, reopen from the session, and reveal a new re
 
 test('revealing a new reply reads it directly and leaves the older cursor in place', async () => {
   feedHistory([feedPost(1), ...Array.from({length:2000}, (_, i) => feedPost(i+2,1))])
-  const root = await readRoot(mock.chain,1n)
+  const root = await readRoot(sessions, mock.chain,1n)
   mock.calls=[]
   const page = await replySlice(mock.chain,root.replies,1n,20,2001n)
   assert.deepEqual(ids(page.list), [...Array.from({length:20},(_,i)=>i+2),2001])
@@ -148,23 +149,23 @@ test('revealing a new reply reads it directly and leaves the older cursor in pla
 
 test('a thread refresh answers from the changes it read, without reading the root again', async () => {
   feedHistory([feedPost(1), feedPost(2, 1), feedPost(3, 2)])
-  const first = await readThread(mock.chain, 2n)
+  const first = await readThread(sessions, mock.chain, 2n)
   await replySlice(mock.chain, first.replies, 2n, 20)
   gateChanged(2n, TOMBSTONE, 4n)
   mock.calls = []
-  const next = await readThread(mock.chain, 2n)
+  const next = await readThread(sessions, mock.chain, 2n)
   assert.equal(next.record.id, 2n)
   assert.equal(next.gate, TOMBSTONE, 'the change log brought the root up to date')
   assert.equal(next.parent.id, 1n)
   assert.ok(mock.calls.some((c) => c.method === 'changes'))
   assert.equal(mock.calls.filter((c) => c.method === 'message').length, 0, 'no second read of the root')
-  await assert.rejects(readThread(mock.chain, 2n, `0x${'ff'.repeat(32)}`), 'a pin the session does not hold is read, and refused, as before')
+  await assert.rejects(readThread(sessions, mock.chain, 2n, `0x${'ff'.repeat(32)}`), 'a pin the session does not hold is read, and refused, as before')
 })
 
 test('a branch opened in place reads its root with its first reply page, then pages on from there', async () => {
   feedHistory([feedPost(1), ...Array.from({ length: 30 }, (_, i) => feedPost(i + 2, 1))])
   mock.calls = []
-  const root = await readRoot(mock.chain, 1n)
+  const root = await readRoot(sessions, mock.chain, 1n)
   assert.equal(root.record.id, 1n)
   assert.equal(root.replies.counts.get(1n), 30)
   assert.deepEqual(mock.calls.map((c) => c.method).filter((m) => m !== 'changes'), ['replies'], 'one read: the page carries its parent')
@@ -181,17 +182,17 @@ test('a branch opened in place reads its root with its first reply page, then pa
 for (const size of [2, 20, 25]) test(`local count updates preserve the requested window of a ${size}-reply branch until show more`, async () => {
   const history = [feedPost(1), ...Array.from({ length: size }, (_, i) => feedPost(i + 2, 1))]
   feedHistory(history)
-  const root = await readRoot(mock.chain, 1n)
+  const root = await readRoot(sessions, mock.chain, 1n)
   const initial = await replySlice(mock.chain, root.replies, 1n, 20)
   assert.equal(initial.more, size > 20)
 
   const mine = size + 2, other = size + 3
   feedHistory([...history, feedPost(mine, 1), feedPost(other, 1)])
   const answer = await readMessage(mock.chain, BigInt(mine), 1)
-  await acceptReply(mock.chain, [1n], answer.at, answer.record, answer.ancestors[0])
+  await acceptReply(sessions, mock.chain, [1n], answer.at, answer.record, answer.ancestors[0])
   mock.calls = []
 
-  const resumed = await readRoot(mock.chain, 1n, true)
+  const resumed = await readRoot(sessions, mock.chain, 1n, true)
   const kept = await replySlice(mock.chain, resumed.replies, 1n, 20)
   const expected = ids(initial.list)
   if (size <= 20) expected.push(mine)
@@ -210,7 +211,7 @@ for (const size of [2, 20, 25]) test(`local count updates preserve the requested
 test('earlier thread context keeps reply counts in its session through reopening and refresh', async () => {
   const history = [feedPost(1), feedPost(2, 1), feedPost(3, 1), feedPost(4, 2), feedPost(6, 2)]
   feedHistory(history)
-  const first = await readThread(mock.chain, 6n)
+  const first = await readThread(sessions, mock.chain, 6n)
   assert.equal(first.replies.counts.get(2n), 2)
   mock.calls = []
   const earlier = await readEarlier(mock.chain, first.replies, 1n, 4)
@@ -218,18 +219,18 @@ test('earlier thread context keeps reply counts in its session through reopening
   assert.equal(first.replies.counts.get(1n), 2)
   assert.deepEqual(mock.calls.map(c => c.method), ['message'], 'one bounded ancestor read, no reply pages')
   assert.equal(new URL(mock.calls[0].url, 'https://client.invalid').searchParams.get('ancestors'), '3')
-  const reopened = await readThread(mock.chain, 6n)
+  const reopened = await readThread(sessions, mock.chain, 6n)
   assert.equal(reopened.replies.counts.get(1n), 2)
   feedHistory([...history, feedPost(7, 1)])
   mock.calls = []
-  const refreshed = await readThread(mock.chain, 6n)
+  const refreshed = await readThread(sessions, mock.chain, 6n)
   assert.equal(refreshed.replies.counts.get(1n), 3, 'refresh includes older context without another ancestor read')
   assert.ok(mock.calls.every(c => c.method === 'changes'))
 })
 
 test('visible replies beyond the first page survive expansion and later paging without duplicates', async () => {
   feedHistory([feedPost(1), ...Array.from({ length: 45 }, (_, i) => feedPost(i + 2, 1))])
-  const root = await readRoot(mock.chain, 1n)
+  const root = await readRoot(sessions, mock.chain, 1n)
   const keep = [40n, 44n]
   const first = await replySlice(mock.chain, root.replies, 1n, 20, undefined, keep)
   assert.deepEqual(ids(first.list), [...Array.from({ length: 20 }, (_, i) => i + 2), 40, 44])
@@ -245,7 +246,7 @@ test('visible replies beyond the first page survive expansion and later paging w
 
 test('dismissed preview pins leave the shared reply session without fetching the gap', async () => {
   feedHistory([feedPost(1), ...Array.from({ length: 25 }, (_, i) => feedPost(i + 2, 1))])
-  const root = await readRoot(mock.chain, 1n)
+  const root = await readRoot(sessions, mock.chain, 1n)
   const kept = await replySlice(mock.chain, root.replies, 1n, 20, undefined, [26n])
   const prefix = Array.from({ length: 20 }, (_, i) => i + 2)
   assert.deepEqual(ids(kept.list), [...prefix, 26])
@@ -267,7 +268,7 @@ test('own replies never cue a thread refresh, but remain available on refresh', 
   t.after(() => { wallet.account = previous })
   const posts = [feedPost(1)]
   feedHistory(posts)
-  const root = await readRoot(mock.chain, 1n)
+  const root = await readRoot(sessions, mock.chain, 1n)
   await replySlice(mock.chain, root.replies, 1n, 20)
   posts.push(feedPost(2, 1))
   feedHistory(posts)
@@ -275,6 +276,56 @@ test('own replies never cue a thread refresh, but remain available on refresh', 
   posts.push(feedPost(3, 1, address('33'), author))
   feedHistory(posts)
   assert.equal(await peekReplies(mock.chain, root.replies, [1n]), 1)
-  const refreshed = await readRoot(mock.chain, 1n)
+  const refreshed = await readRoot(sessions, mock.chain, 1n)
   assert.deepEqual(ids((await replySlice(mock.chain, refreshed.replies, 1n, 20)).list), [2, 3])
+})
+
+
+test('copied sessions keep their loaded pages, counts and pins without rereading them', async () => {
+  const history = [feedPost(1), ...Array.from({ length: 45 }, (_, i) => feedPost(i + 2, 1))]
+  feedHistory(history)
+  const original = await readThread(sessions, mock.chain, 1n)
+  const first = await replySlice(mock.chain, original.replies, 1n, 20, 46n)
+  const copied = copyReplySessions(sessions)
+  mock.calls = []
+  const next = await readThread(copied, mock.chain, 1n, undefined, true)
+  assert.deepEqual(ids((await replySlice(mock.chain, next.replies, 1n, 20)).list), ids(first.list))
+  assert.deepEqual(mock.calls, [], 'copying and returning reuse the loaded snapshot')
+
+  await replySlice(mock.chain, original.replies, 1n, 40, 45n)
+  feedHistory([...history, feedPost(47, 1)])
+  const updated = await readThread(sessions, mock.chain, 1n)
+  assert.equal(updated.replies.counts.get(1n), 46)
+  mock.calls = []
+  const resumed = await readThread(copied, mock.chain, 1n, undefined, true)
+  assert.equal(resumed.replies.counts.get(1n), 45, 'a refresh cannot overwrite the copied records')
+  assert.deepEqual(ids((await replySlice(mock.chain, resumed.replies, 1n, 20)).list), ids(first.list), 'paging and new pins stay in the original visit')
+  assert.deepEqual(mock.calls, [])
+  const more = await replySlice(mock.chain, resumed.replies, 1n, 40)
+  assert.deepEqual(ids(more.list), [...Array.from({ length: 40 }, (_, i) => i + 2), 46])
+  assert.deepEqual(mock.calls.map(c => [c.method, c.cursor?.after]), [['replies', '21']], 'the copy follows its own saved cursor')
+})
+
+test('copying during paging starts fresh queues and ignores the original late answer', { timeout: 3000 }, async t => {
+  feedHistory([feedPost(1), ...Array.from({ length: 30 }, (_, i) => feedPost(i + 2, 1))])
+  const original = await readThread(sessions, mock.chain, 1n)
+  await replySlice(mock.chain, original.replies, 1n, 20)
+  const fetch = globalThis.fetch, started = deferred(), release = deferred()
+  t.after(() => { release.resolve(); globalThis.fetch = fetch })
+  globalThis.fetch = async (input, init) => {
+    const answer = await fetch(input, init)
+    if (String(input).endsWith('/replies')) {
+      started.resolve()
+      await release.promise
+    }
+    return answer
+  }
+  const paging = replySlice(mock.chain, original.replies, 1n, 40)
+  await started.promise
+  const copied = copyReplySessions(sessions)
+  const next = await readThread(copied, mock.chain, 1n, undefined, true)
+  assert.equal((await replySlice(mock.chain, next.replies, 1n, 20)).list.length, 20, 'the copied branch does not wait for the old queue')
+  release.resolve()
+  assert.equal((await paging).list.length, 30)
+  assert.equal((await replySlice(mock.chain, next.replies, 1n, 20)).list.length, 20, 'a late page cannot enlarge the copy')
 })

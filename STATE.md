@@ -110,7 +110,8 @@ Standalone "in reply to" labels name the parent's author from the reply record
 (verified name or shortened address) alongside its number. They link to the parent
 thread and have no reply controls. Unknown or host-blocked authors leave just the
 number. Reply controls belong to post cards.
-An ordinary same-tab click on a stream context label carries its visible conversation
+An ordinary same-tab click on a stream card, its post-number or full-post link,
+or its context label carries its visible conversation
 into the new thread visit. Loaded lists publish their paging and open choices while
 mounted, so the click does not depend on teardown ordering. The copy includes visible
 preview replies beyond a paging gap, without reading the intervening pages. Only
@@ -135,6 +136,17 @@ only paging and expansion choices. Back preserves retained cards, while explicit
 collapse dismisses them, including pins past the first page. Explicit Refresh or sidebar Home clears
 the retained cards and rebuilds previews using the normal feed rules. Deleted or removed
 kept cards disappear; surviving descendants keep their parent context links.
+Reply sessions belong to a retained stream row, a thread visit, or an embedded
+discussion. Different rows, streams and thread visits never share their mutable
+reply windows or learned membership. The page arrow copies the previous thread's
+loaded reply state and choices into its new history entry, with fresh request
+queues; outstanding reads finish only in their original visit. Already loaded
+pages need no new requests. Browser Back reuses the owner's session without
+refreshing it; entering a new thread reads its own pages and copies only the
+stream's expansion choices and retained preview ids. Inheriting a deeply expanded
+conversation can therefore reread multiple reply pages. Confirmed own replies
+still update off-screen streams, appending only to complete branches and leaving
+partial branches' paging gaps intact.
 Preview cards and loaded copies share their row's expansion choice and each open
 post's reply session. Moving between them preserves paging and open branches,
 without fetching that page again. A handoff can briefly mount both copies, so the

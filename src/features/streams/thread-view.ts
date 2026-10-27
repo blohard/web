@@ -3,13 +3,20 @@
 import { getContext, setContext } from 'svelte'
 import type { ChainInfo, MessageRecord } from '../../lib/types'
 import { router } from '../navigation/router.svelte'
+import { copyReplySessions, type ReplySessions } from './replies'
 import type { ReplyViews } from './stream-expansion'
 
-type ThreadView = { ancestors: MessageRecord[]; branches: ReplyViews; repliesOpen: boolean; openAncestors: Record<string, boolean> }
+type ThreadView = { sessions: ReplySessions; ancestors: MessageRecord[]; branches: ReplyViews; repliesOpen: boolean; openAncestors: Record<string, boolean> }
 
 export function threadView(chain: ChainInfo, id: bigint, branches: ReplyViews = new Map()): ThreadView {
   return router.visit.state<ThreadView>(`thread/${chain.id}/${chain.contract}/${id}`, () => ({
-    ancestors: [], branches, repliesOpen: true, openAncestors: {},
+    sessions: new Map(), ancestors: [], branches, repliesOpen: true, openAncestors: {},
+  }), view => ({
+    sessions: copyReplySessions(view.sessions), ancestors: [...view.ancestors],
+    repliesOpen: view.repliesOpen, openAncestors: { ...view.openAncestors },
+    branches: new Map([...view.branches].map(([id, branch]) => [id, {
+      limit: branch.limit, open: { ...branch.open }, retained: branch.retained ? [...branch.retained] : undefined,
+    }])),
   }))
 }
 

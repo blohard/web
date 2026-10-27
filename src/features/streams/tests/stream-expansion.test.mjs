@@ -16,7 +16,7 @@ const stranger = address('55'), other = address('66')
 async function openBranch(chain, rowx, root, limit = 20) {
   if (!rowx.isOpen(root)) rowx.press(root)
   rowx.shown.add(root)
-  const { replies } = await readRoot(chain, root)
+  const { replies } = await readRoot(rowx.sessions, chain, root)
   return { replies, slice: await replySlice(chain, replies, root, limit) }
 }
 
@@ -322,4 +322,21 @@ test('a thread inherits only its visible conversation with detached paging and e
   assert.equal(row.isOpen(4n), true)
   row.hide(4n)
   assert.equal(row.inherit(1n, preview).has(4n), false, 'a collapsed branch does not inherit stale nested choices')
+})
+
+test('two rows displaying the same post own independent pages and mounted lists', async () => {
+  feedHistory([feedPost(1), ...Array.from({ length: 30 }, (_, i) => feedPost(i + 2, 1))])
+  const expansion = expansionOf('independent-row-sessions')
+  const a = new RowExpansion(expansion, 7n), b = new RowExpansion(expansion, 8n)
+  const leave = a.watch(1n)
+  assert.equal(a.isMounted(1n), true)
+  assert.equal(b.isMounted(1n), false)
+  await openBranch(mock.chain, a, 1n, 20)
+  await openBranch(mock.chain, b, 1n, 40)
+  const returning = new RowExpansion(expansion, 7n)
+  const root = await readRoot(returning.sessions, mock.chain, 1n, true)
+  assert.equal((await replySlice(mock.chain, root.replies, 1n, 20)).list.length, 20)
+  assert.equal(returning.sessions, a.sessions)
+  assert.notEqual(a.sessions, b.sessions)
+  leave()
 })

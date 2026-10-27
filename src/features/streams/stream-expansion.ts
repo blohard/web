@@ -6,7 +6,9 @@
 // Every card can open its own direct replies. A preview and its later copy in
 // a loaded list share the same choice, without opening intervening branches.
 import { SvelteMap } from 'svelte/reactivity'
-import type { Posted } from '../../lib/types'
+import { acceptReply, completeBranches, type ReplySessions } from './replies'
+import type * as api from '../../lib/api'
+import type { ChainInfo, Posted } from '../../lib/types'
 import type { ConversationRowData } from './conversation'
 import { oldestFirst } from '../../lib/board'
 
@@ -18,6 +20,8 @@ export type ReplyViews = Map<bigint, {
   retained?: bigint[]
 }>
 
+type RowState = { views: ReplyViews; sessions: ReplySessions; shown: Set<bigint>; mounts: Map<bigint, number> }
+
 /** A parent's retained replies and whether they still stand outside its list. */
 type Preview = { posts: readonly Posted[]; separate: boolean }
 
@@ -25,13 +29,9 @@ export type Expansion = {
   /** Explicit choices override the default preview. Branches under stream cards, keyed by row and post: the same post standing in two rows opens in each on its own. */
   modes: SvelteMap<string, 'open' | 'hidden'>
   /** Paging and nested choices inside the branches, per row, so two rows showing one post keep their own. */
-  views: Map<bigint, ReplyViews>
+  rows: Map<bigint, RowState>
   /** One saved placement per parent, within each row. Empty, non-separate entries remember dismissal. */
   previews: Map<bigint, SvelteMap<bigint, Preview>>
-  /** Parents whose reply lists are on screen right now, kept by the lists themselves; the refresh cue counts only those. */
-  shown: Set<bigint>
-  /** A handoff may briefly mount two copies of a list. */
-  mounts: Map<bigint, number>
 }
 
 const expansions = new Map<string, Expansion>()
@@ -43,7 +43,7 @@ const branchKey = (row: bigint, id: bigint): string => `${row}/${id}`
 export function expansionOf(key: string): Expansion {
   let e = expansions.get(key)
   if (!e) {
-    e = { modes: new SvelteMap(), views: new Map(), previews: new Map(), shown: new Set(), mounts: new Map() }
+    e = { modes: new SvelteMap(), rows: new Map(), previews: new Map() }
     expansions.set(key, e)
   }
   return e
@@ -52,7 +52,7 @@ export function expansionOf(key: string): Expansion {
 /** Reset saved choices only when present. Unchanged rows keep their mounted cards. */
 export function resetExpansion(key: string): boolean {
   const e = expansions.get(key)
-  if (!e || (!e.modes.size && !e.views.size && ![...e.previews.values()].some(previews => previews.size))) return false
+  if (!e || (!e.modes.size && ![...e.rows.values()].some(row => row.views.size) && ![...e.previews.values()].some(previews => previews.size))) return false
   // Mounted lists finish against their old record.
   return expansions.delete(key)
 }
@@ -67,8 +67,40 @@ export function openRoots(key: string): ReadonlySet<bigint> {
 export const branchOpen = (key: string, row: bigint, id: bigint): boolean =>
   expansions.get(key)?.modes.get(branchKey(row, id)) === 'open'
 
-/** The parents whose reply lists a stream has on screen. */
-export const shownParents = (key: string): ReadonlySet<bigint> => expansions.get(key)?.shown ?? new Set()
+/** Each open row keeps its own session, even when another row shows the same post. */
+function openRows(key: string) {
+  const e = expansions.get(key)
+  const rows = new Map<bigint, Set<bigint>>()
+  for (const [key, mode] of e?.modes ?? []) {
+    if (mode !== 'open') continue
+    const [row, id] = key.split('/').map(BigInt)
+    const roots = rows.get(row) ?? new Set<bigint>()
+    roots.add(id)
+    rows.set(row, roots)
+  }
+  return [...rows].flatMap(([row, roots]) => {
+    const state = e?.rows.get(row)
+    return state ? [{ ...state, roots }] : []
+  })
+}
+
+/** Merge the refresh cue's known replies without sharing the rows' mutable sessions. */
+export function completeStreamBranches(chain: ChainInfo, key: string): Map<bigint, ReadonlySet<bigint>> {
+  const result = new Map<bigint, Set<bigint>>()
+  for (const { sessions, roots, shown } of openRows(key)) {
+    for (const [parent, ids] of completeBranches(sessions, chain, roots, shown)) {
+      const known = result.get(parent) ?? new Set<bigint>()
+      for (const id of ids) known.add(id)
+      result.set(parent, known)
+    }
+  }
+  return result
+}
+
+/** Own publications update only the named retained stream. */
+export async function acceptStreamReply(chain: ChainInfo, key: string, at: api.At, record: api.RecordImage, parent?: api.RecordImage): Promise<void> {
+  await Promise.all(openRows(key).map(({ sessions, roots }) => acceptReply(sessions, chain, roots, at, record, parent)))
+}
 
 /**
  * Parents whose new replies would stay hidden by an explicit collapse. Use
@@ -106,9 +138,12 @@ export function collapsedParents(key: string, rows: readonly ConversationRowData
 export class RowExpansion {
   private readonly arrived = new SvelteMap<bigint, bigint>()
   private readonly previews: SvelteMap<bigint, Preview>
+  private readonly state: RowState
   constructor(private readonly expansion: Expansion, readonly row: bigint) {
     this.previews = expansion.previews.get(row) ?? new SvelteMap()
     expansion.previews.set(row, this.previews)
+    this.state = expansion.rows.get(row) ?? { views: new Map(), sessions: new Map(), shown: new Set(), mounts: new Map() }
+    expansion.rows.set(row, this.state)
   }
 
   /** Keep visible cards without fetching ancestors or opening any branches. */
@@ -151,12 +186,12 @@ export class RowExpansion {
   }
 
   isMounted(parent: bigint): boolean {
-    return this.expansion.mounts.has(parent)
+    return this.state.mounts.has(parent)
   }
 
   /** Keep the refresh cue registered while a preview list moves into a parent list. */
   watch(parent: bigint): () => void {
-    const { mounts, shown } = this.expansion
+    const { mounts, shown } = this.state
     mounts.set(parent, (mounts.get(parent) ?? 0) + 1)
     shown.add(parent)
     return () => {
@@ -211,13 +246,11 @@ export class RowExpansion {
 
   /** Paging and nested choices of this row's branches, apart from other rows showing the same post; the same row finds them again. */
   views(): ReplyViews {
-    let v = this.expansion.views.get(this.row)
-    if (!v) {
-      v = new Map()
-      this.expansion.views.set(this.row, v)
-    }
-    return v
+    return this.state.views
   }
+
+  /** The same retained row owns all its opened branch reads. */
+  get sessions(): ReplySessions { return this.state.sessions }
 
   /** Copy just the clicked conversation into a thread; neither view owns the other's choices. */
   inherit(root: bigint, preview: readonly Posted[]): ReplyViews {
@@ -256,6 +289,6 @@ export class RowExpansion {
 
   /** Where the lists register themselves while on screen, for the stream's refresh cue. */
   get shown(): Set<bigint> {
-    return this.expansion.shown
+    return this.state.shown
   }
 }

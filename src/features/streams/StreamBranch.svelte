@@ -1,6 +1,6 @@
 <script lang="ts">
   // A conversation opened in place under a stream card: the thread page's own
-  // replies list, fed by that post's thread session. A local reload hands
+  // replies list, fed by this row's session for the post. A local reload hands
   // it a fresh facade; the list keeps its rows,
   // appends to a complete branch and leaves a partial one at its length.
   import { onDestroy, untrack, type Snippet } from 'svelte'
@@ -48,7 +48,7 @@
   let request = $derived.by(() => {
     void reloadKey
     void again
-    return readRoot(chain, id, opening.resume && reloadKey === opening.key && again === 0)
+    return readRoot(rowx.sessions, chain, id, opening.resume && reloadKey === opening.key && again === 0)
   })
   // One wait covers reading the thread and its first list preparing, so the
   // reply count's spinner does not go out and come back between the two.
