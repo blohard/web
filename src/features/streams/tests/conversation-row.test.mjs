@@ -59,10 +59,10 @@ for (const failed of [false, true]) for (const firstParent of [1, 3]) {
     assert.match(card(html, 6), /1 reply<\/button>/)
     assert.match(card(html, 4), /<article[^>]*\bconnector\b/)
     assert.equal(separators(html)[0][1], false, 'the label or loading placeholder owns the separator')
-    const label = new RegExp(`href="/p/${mock.chain.id}/${firstParent}">in reply to #${firstParent}`)
+    const label = new RegExp(`href="/p/${mock.chain.id}/${firstParent}">in reply to (?:<span[^>]*>[^<]*</span> )?#${firstParent}`)
     if (failed || firstParent !== 1) assert.match(html, label)
-    else assert.doesNotMatch(html, /in reply to #1/, 'the loading placeholder already names the parent')
-    assert.doesNotMatch(html, /in reply to #4/, 'the siblings already show their parent')
+    else assert.doesNotMatch(html, /in reply to (?:<span[^>]*>[^<]*<\/span> )?#1/, 'the loading placeholder already names the parent')
+    assert.doesNotMatch(html, /in reply to (?:<span[^>]*>[^<]*<\/span> )?#4/, 'the siblings already show their parent')
     assert.equal(html.includes('loading #1'), !failed)
   })
 }
@@ -113,8 +113,8 @@ test('an omitted parent has one context link without reply controls', async t =>
   const view = await fixture(t, [root, ...replies])
   const draw = () => view.row({ root: { id: 1n, omitted: true, drawn: 3, joins: false }, cards: replies.map(p => preview(p)) }, [[1n, 6], [5n, 0], [6n, 0], [7n, 0]])
   const previewed = await draw()
-  assert.equal((previewed.match(/in reply to #1/g) ?? []).length, 1)
-  assert.match(previewed, new RegExp(`href="/p/${mock.chain.id}/1">in reply to #1`))
+  assert.equal((previewed.match(/in reply to (?:<span[^>]*>[^<]*<\/span> )?#1/g) ?? []).length, 1)
+  assert.match(previewed, new RegExp(`href="/p/${mock.chain.id}/1">in reply to (?:<span[^>]*>[^<]*</span> )?#1`))
   assert.deepEqual(ids(previewed), [5, 6, 7])
   assert.doesNotMatch(previewed, /class="[^"]*reply-count/)
   assert.doesNotMatch(previewed, /loading #1/)
@@ -127,8 +127,8 @@ test('an omitted grouping ancestor has no header above a reply to a different pa
   const html = await view.row({ root: { id: 376n, omitted: true, drawn: 0, joins: false },
     cards: [preview(reply, 0, false, true)] }, [[376n, 1], [380n, 0]])
   assert.deepEqual(ids(html), [380])
-  assert.match(html, new RegExp(`href="/p/${mock.chain.id}/379">in reply to #379`))
-  assert.doesNotMatch(html, /in reply to #376/)
+  assert.match(html, new RegExp(`href="/p/${mock.chain.id}/379">in reply to (?:<span[^>]*>[^<]*</span> )?#379`))
+  assert.doesNotMatch(html, /in reply to (?:<span[^>]*>[^<]*<\/span> )?#376/)
   assert.doesNotMatch(html, /1 reply<\/button>/)
 })
 
@@ -153,7 +153,7 @@ test('context labels own the separator for a root reply and an omitted parent', 
   const view = await fixture(t, [root, reply, post(8)])
   const row = { root: { id: 9n, post: root, drawn: 1, joins: true }, cards: [preview(reply)] }
   const html = await view.row(row)
-  assert.match(html, new RegExp(`href="/p/${mock.chain.id}/8">in reply to #8`))
+  assert.match(html, new RegExp(`href="/p/${mock.chain.id}/8">in reply to (?:<span[^>]*>[^<]*</span> )?#8`))
   assert.deepEqual(separators(html), [[9, false], [10, false]])
   row.root = { id: 9n, omitted: true, drawn: 1, joins: false }
   assert.deepEqual(separators(await view.row(row)), [[10, false]])
@@ -226,4 +226,17 @@ test('a root offers its full count when context separates it from its direct rep
   assert.match(card(html, 1), /2 replies<\/button>/)
   assert.doesNotMatch(card(html, 1), /hide replies|more repl/)
   assert.deepEqual(ids(html), [1, 4, 5], 'the control change does not hide existing cards')
+})
+
+test('context names identify the parent for root replies, omitted parents and gaps', async t => {
+  const parentAuthor = `0x${'98'.repeat(20)}`
+  const parent = feedPost(1, 0, parentAuthor)
+  const reply = feedPost(2, 1, author, parentAuthor)
+  const view = await fixture(t, [parent, reply])
+  const expected = new RegExp(`href="/p/${mock.chain.id}/1">in reply to <span[^>]*title="${parentAuthor}"[^>]*>[^<]+</span> #1`)
+  for (const row of [
+    { root: { id: 2n, post: reply, drawn: 0, joins: false }, cards: [] },
+    { root: { id: 1n, omitted: true, drawn: 1, joins: false }, cards: [preview(reply)] },
+    { root: { id: 99n, omitted: true, drawn: 0, joins: false }, cards: [preview(reply, 0, false, true)] },
+  ]) assert.match(await view.row(row), expected)
 })

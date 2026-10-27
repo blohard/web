@@ -106,8 +106,10 @@ The wait ends at most two seconds after the reply page arrives. Ready cards then
 show while unfinished cards keep their own loading and folding checks; a slow
 body or verdict cannot hold up the whole list. Collapsing cancels this deadline.
 When expanding a stream row, a preview already on screen remains until then.
-Standalone "in reply to" labels only link to the parent thread and have no reply
-controls. Reply controls belong to post cards.
+Standalone "in reply to" labels name the parent's author from the reply record
+(verified name or shortened address) alongside its number. They link to the parent
+thread and have no reply controls. Unknown or host-blocked authors leave just the
+number. Reply controls belong to post cards.
 Stream reply counts expand in place, including preview cards; a post-number link
 opens its thread page. Where inline expansion is unavailable, as in notifications,
 the count links to `?replies`: the thread reveals its replies as content settles,

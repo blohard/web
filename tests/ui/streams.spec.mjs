@@ -449,7 +449,7 @@ test('expanding Curated replies preserves the nested preview and other stream ro
     await expect(card(page, id)).toBeVisible()
   }
   expect(reads).toEqual(['2', '1'])
-  await expect(page.getByRole('link', { name: 'in reply to #2', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /^in reply to (?:.* )?#2$/ })).toHaveCount(0)
   // Back preserves the branch opened from a preview and later moved into its parent list.
   await card(page, 13).getByRole('link', { name: 'open post #13', exact: true }).click()
   await expect(page).toHaveURL(/\/p\/84532\/13$/)
@@ -458,7 +458,7 @@ test('expanding Curated replies preserves the nested preview and other stream ro
   await expect(card(page, 6)).toHaveCount(1)
   await expect(card(page, 7)).toBeVisible()
   await expect(card(page, 2).getByRole('button', { name: 'hide replies', exact: true })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'in reply to #2', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /^in reply to (?:.* )?#2$/ })).toHaveCount(0)
   await expect(card(page, 6)).toHaveCount(1)
   await card(page, 2).getByRole('button', { name: 'hide replies', exact: true }).click()
   await expect(card(page, 6)).toHaveCount(0)
@@ -791,7 +791,7 @@ test('following includes context for a followed reply while signed out, without 
   const order = () => page.locator('article.msg a[aria-label^="open post #"]').evaluateAll(links => links.map(a => a.getAttribute('aria-label')))
   await expect.poll(order).toEqual([872, 877, 850, 855, 854].map(id => `open post #${id}`))
   await expect(card(page, 873)).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'in reply to #872', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /^in reply to (?:.* )?#872$/ })).toHaveCount(0)
   await card(page, 872).getByRole('button', { name: '1 more reply', exact: true }).click()
   await expect(card(page, 873)).toBeVisible()
   await expect(card(page, 877)).toHaveCount(1)
@@ -805,8 +805,8 @@ test('following shows the immediate unfollowed parent without adding its ancesto
   await expect(card(page, 380)).toBeVisible()
   await expect(card(page, 376)).toHaveCount(0)
   await expect(card(page, 379)).toBeVisible()
-  await expect(page.getByRole('link', { name: 'in reply to #379', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'in reply to #376', exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: /^in reply to (?:.* )?#379$/ })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /^in reply to (?:.* )?#376$/ })).toBeVisible()
 })
 
 for (const direct of [false, true]) test(`following ${direct ? 'keeps direct replies grouped' : 'shows parent context without promoting ancestors'}`, async ({ page, host }) => {
@@ -820,7 +820,7 @@ for (const direct of [false, true]) test(`following ${direct ? 'keeps direct rep
   const order = () => page.locator('article.msg a[aria-label^="open post #"]').evaluateAll(links => links.map(a => a.getAttribute('aria-label')))
   await expect.poll(order).toEqual((direct ? [345, 530, 531, 522] : [529, 530, 531, 522, 345]).map(id => `open post #${id}`))
   await expect(card(page, 529)).toHaveCount(direct ? 0 : 1)
-  await expect(page.getByRole('link', { name: 'in reply to #529', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /^in reply to (?:.* )?#529$/ })).toHaveCount(0)
   for (const id of [345, 522, 530, 531]) await expect(card(page, id)).toHaveCount(1)
 })
 
@@ -955,8 +955,8 @@ test('Curated omits a context-only root orphaned by age folding', async ({ page,
   await page.getByRole('button', { name: '[ curated ]', exact: true }).click()
   for (const id of [100, 578, 579, 562]) await expect(card(page, id)).toBeVisible()
   for (const id of [75, 76, 82]) await expect(card(page, id)).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'in reply to #82', exact: true })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'in reply to #75', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /^in reply to (?:.* )?#82$/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /^in reply to (?:.* )?#75$/ })).toHaveCount(0)
 })
 
 
@@ -969,8 +969,8 @@ test('profile replies keep older context above the immediate parent', async ({ p
   await expect(row).toHaveCount(1)
   await expect(row.locator('article.msg a[aria-label^="open post #"]')).toHaveText(['#979', '#997', '#1000'])
   await expect(row.getByText('Original context', { exact: true })).toBeVisible()
-  await expect(row.getByText('in reply to #979', { exact: true })).toHaveCount(0)
-  await expect(row.getByText('in reply to #997', { exact: true })).toHaveCount(0)
+  await expect(row.getByText(/^in reply to (?:.* )?#979$/)).toHaveCount(0)
+  await expect(row.getByText(/^in reply to (?:.* )?#997$/)).toHaveCount(0)
 })
 
 

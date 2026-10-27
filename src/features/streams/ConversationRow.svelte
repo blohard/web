@@ -3,6 +3,8 @@
   // Every count opens direct replies in place. Keep existing preview cards
   // until their own parent's opened list is ready to take them over.
   import { untrack } from 'svelte'
+  import Name from '../../components/Name.svelte'
+  import { host } from '../../lib/host.svelte'
   import { replying } from '../publishing/replying.svelte'
   import { firstDisplay, firstScreenRow } from '../../shared/first-screen.svelte'
   import { ENDING_LABEL, endingOf } from '../../lib/board'
@@ -115,15 +117,15 @@
   }
 </script>
 
-{#snippet answers(id: bigint, separator = true)}
+{#snippet answers(id: bigint, author: string | undefined, separator = true)}
   {@const ending = endingOf(ledger.message(chain, id))}
-  <a class="conversation-context" class:no-separator={!separator} href={href.thread(chain.id, id)}>in reply to #{id}{#if ending} · {ENDING_LABEL[ending]}{/if}</a>
+  <a class="conversation-context" class:no-separator={!separator} href={href.thread(chain.id, id)}>in reply to {#if author && !host.blocked(author)}<Name address={author} />{' '}{/if}#{id}{#if ending} · {ENDING_LABEL[ending]}{/if}</a>
 {/snippet}
 
 {#snippet preview(display: PreviewLayout)}
   {#each display.cards as card (card.post.id)}
     {@const r = card.post}
-    {#if card.context}{@render answers(card.context.id, card.context.separator)}{/if}
+    {#if card.context}{@render answers(card.context.id, r.parentAuthor, card.context.separator)}{/if}
     <MessageCard separator={card.separator} {gateRefreshReady} {reloadKey}
       {chain}
       msg={r}
@@ -149,7 +151,7 @@
 
 {#snippet pair(p: Posted)}
   <!-- A muted parent collapses to one line, as any muted post does; the reply beneath it is the reader's own or a followed author's, and stays. -->
-  {#if p.parentId !== 0n}{@render answers(p.parentId)}{/if}
+  {#if p.parentId !== 0n}{@render answers(p.parentId, p.parentAuthor)}{/if}
   <MessageCard {gateRefreshReady} {reloadKey} {chain} msg={p}
     separator={p.parentId === 0n}
     connector={rootConnector}
@@ -180,7 +182,7 @@
   {#if row.root.omitted}
     <!-- A grouping ancestor needs a header only for its direct preview or an explicit expansion choice. -->
     {#if rootPreviewJoins || expanded || hidden}
-      {@render answers(rootId)}
+      {@render answers(rootId, parent?.author ?? cards.find(card => card.post.parentId === rootId)?.post.parentAuthor)}
     {/if}
     {@render replies()}
   {:else if parent}

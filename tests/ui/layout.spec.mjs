@@ -9,7 +9,7 @@ for (const width of [1100, 390]) test.describe(`layout at ${width}px`, () => {
     host.post(2, 'The visible parent', { who: stranger, parent: 1 })
     host.post(3, 'The followed reply', { parent: 2 })
     await page.goto('/')
-    const label = page.locator('.conversation-context').filter({ hasText: 'in reply to #1' })
+    const label = page.locator('.conversation-context').filter({ hasText: /^in reply to .* #1$/ })
     await expect(label).toBeVisible()
     await expect(card(page, 2)).toBeVisible()
     await expect(card(page, 3)).toBeVisible()

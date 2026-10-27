@@ -72,7 +72,7 @@ test('an omitted parent is a context link while post cards keep their reply cont
   host.post(3, 'Nested reply', { parent: 2 })
   await mount(page, host, { root: { id: 1, omitted: true, drawn: 1, joins: false },
     cards: [preview(reply)], counts: [[1, 1], [2, 1]] })
-  const context = page.getByRole('link', { name: 'in reply to #1', exact: true })
+  const context = page.getByRole('link', { name: /^in reply to (?:.* )?#1$/ })
   await expect(context).toHaveCount(1)
   await expect(context).toHaveAttribute('href', `/p/${host.chain.id}/1`)
   await expect(page.locator('.conversation-context button')).toHaveCount(0)
@@ -157,7 +157,7 @@ test('expanding a deep preview reads only the requested replies and keeps its ex
   await expect(card(page, 2)).toBeVisible()
   await expect.poll(() => ids(page)).toEqual([1, 2, 37, 39, 41])
   expect(reads).toEqual(['1'])
-  for (const parent of [36, 38, 40]) await expect(page.getByRole('link', { name: `in reply to #${parent}`, exact: true })).toBeVisible()
+  for (const parent of [36, 38, 40]) await expect(page.getByRole('link', { name: new RegExp(`^in reply to (?:.* )?#${parent}$`) })).toBeVisible()
 })
 
 test('expanding keeps a preview beneath a deleted reply as labelled context', async ({ page, host }) => {
@@ -173,7 +173,7 @@ test('expanding keeps a preview beneath a deleted reply as labelled context', as
   await card(page, 1).getByRole('button', { name: '1 reply', exact: true }).click()
   await expect(card(page, 4)).toBeVisible()
   await expect.poll(() => ids(page)).toEqual([1, 4, 3])
-  await expect(page.getByRole('link', { name: /in reply to #2\s*· deleted by its author/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /in reply to (?:.* )?#2\s*· deleted by its author/ })).toBeVisible()
 })
 
 
@@ -195,9 +195,9 @@ test('a kept preview moves into its parent list after readiness and survives pag
     await started.promise
     await page.clock.runFor(1500)
     await expect(card(page, 44).filter({ visible: true })).toHaveCount(1)
-    await expect(page.getByRole('link', { name: 'in reply to #2', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: /^in reply to (?:.* )?#2$/ })).toBeVisible()
     await page.clock.runFor(600)
-    await expect(page.getByRole('link', { name: 'in reply to #2', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: /^in reply to (?:.* )?#2$/ })).toHaveCount(0)
     await expect(card(page, 44)).toHaveCount(1)
     await expect(card(page, 44)).toBeVisible()
     await expect(page.getByText('use “show more” to read the replies in between.', { exact: true })).toBeVisible()
@@ -232,7 +232,7 @@ test('ended kept replies disappear while their surviving descendants keep contex
   await expect(card(page, 3)).toHaveCount(0)
   await expect(card(page, 5)).toHaveCount(0)
   await expect.poll(() => ids(page)).toEqual([1, 2, 4])
-  await expect(page.getByRole('link', { name: /in reply to #3\s*· deleted by its author/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /in reply to (?:.* )?#3\s*· deleted by its author/ })).toBeVisible()
 })
 
 test('hide replies forgets a preview pinned past the first page', async ({ page, host }) => {

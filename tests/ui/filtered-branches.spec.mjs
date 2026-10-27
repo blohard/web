@@ -39,7 +39,7 @@ for (const width of [1100, 390]) test(`Back from a context thread preserves the 
   await expect(card(page, 2)).toHaveCount(0)
   const before = await page.locator('article.msg').allTextContents()
   for (let visit = 0; visit < 2; visit++) {
-    await page.getByRole('link', { name: 'in reply to #2', exact: true }).click()
+    await page.getByRole('link', { name: /^in reply to (?:.* )?#2$/ }).click()
     await expect(page).toHaveURL(/\/p\/84532\/2$/)
     await expect(card(page, 2)).toBeVisible()
     if (visit === 0) await page.getByRole('button', { name: 'back', exact: true }).click()
@@ -47,7 +47,7 @@ for (const width of [1100, 390]) test(`Back from a context thread preserves the 
     await expect(page).toHaveURL(/\/$/)
     await expect(card(page, 5)).toBeVisible()
     await expect(card(page, 2)).toHaveCount(0)
-    await expect(page.getByRole('link', { name: 'in reply to #2', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: /^in reply to (?:.* )?#2$/ })).toBeVisible()
     expect(await page.locator('article.msg').allTextContents()).toEqual(before)
   }
 })
