@@ -132,7 +132,7 @@
     const previous = untrack(() => rows.value(identity))
     const end = Math.max(limit, previous?.loaded ?? 0, previous?.more === false ? data.counts.get(parentId) ?? 0 : 0)
     // Placement changes do not reload the list; sample pins when a read is requested.
-    const retained = untrack(() => rowx?.retained(parentId).map(r => r.id))
+    const retained = untrack(() => rowx ? rowx.retained(parentId).map(r => r.id) : saved?.retained)
     const slice = await replySlice(chain, data, parentId, end, reveal, retained)
     // If the focused child is the only unread entry, finish the branch now.
     // Otherwise "show more" would add nothing and quiet polling would keep
@@ -181,10 +181,18 @@
     const k = r.id.toString()
     if (open[k]) { open[k] = false; delete arrived[k] } else open[k] = true
   }
-  // Deriveds are already destroyed here; take the displayed length from the resource itself.
-  onDestroy(() => target.views?.set(target.parentId, {
-    limit: Math.max(requested, rows.result?.value.loaded ?? 0), open: $state.snapshot(open),
-  }))
+  // The resource remains readable during teardown, after deriveds are gone.
+  function saveView() {
+    const list = rows.result?.value.list.filter(r => r.id !== omit && !endingOf(gates.message(chain, r.id))) ?? []
+    target.views.set(target.parentId, {
+      limit: Math.max(requested, rows.result?.value.loaded ?? 0),
+      open: rowx ? Object.fromEntries(list.map(r => [r.id.toString(), rowx.isOpen(r.id)])) : $state.snapshot(open),
+      retained: rowx ? list.map(r => r.id) : saved?.retained,
+    })
+  }
+  // A context link can snapshot the stream before these lists unmount.
+  $effect(() => { if (rowx) saveView() })
+  onDestroy(saveView)
 </script>
 
 <div class="reply-list" class:preparing={!prepared}>

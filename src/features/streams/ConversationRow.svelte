@@ -14,7 +14,8 @@
   import { layoutPreview, replyControls, type PreviewLayout, type PreviewState } from './conversation-layout'
   import type { Page } from './feed'
   import { Resource } from '../../shared/resource.svelte'
-  import { href } from '../navigation/router.svelte'
+  import { href, plainClick, router } from '../navigation/router.svelte'
+  import { threadView } from './thread-view'
   import type { ChainInfo, Posted, MessageRecord } from '../../lib/types'
   import type { RowExpansion } from './stream-expansion'
   import InlineReply from '../publishing/InlineReply.svelte'
@@ -112,6 +113,19 @@
     return row.depthFirst ? branchOrder(live) : live
   }
 
+  function openContext(event: MouseEvent, id: bigint) {
+    if (!plainClick(event) || router.embed) return
+    event.preventDefault()
+    const preview = [
+      ...(parent && !row.root.omitted ? [parent] : []),
+      ...(keepPreview && !hidden && !branchReady ? displayPreview(cards).posts : []),
+      ...(expanded && branchReady ? rowx.preview(remainingPosts()) : []),
+    ].filter(post => !endingOf(ledger.message(chain, post.id)))
+    const branches = rowx.inherit(id, preview)
+    router.go(href.thread(chain.id, id))
+    threadView(chain, id, branches)
+  }
+
   function remainingPreview(posts: Posted[], context = rootId, connected = false): PreviewLayout {
     return displayPreview(conversationCards(context, posts), !connected, context, connected)
   }
@@ -119,7 +133,7 @@
 
 {#snippet answers(id: bigint, author: string | undefined, separator = true)}
   {@const ending = endingOf(ledger.message(chain, id))}
-  <a class="conversation-context" class:no-separator={!separator} href={href.thread(chain.id, id)}>in reply to {#if author && !host.blocked(author)}<Name address={author} />{' '}{/if}#{id}{#if ending} · {ENDING_LABEL[ending]}{/if}</a>
+  <a class="conversation-context" class:no-separator={!separator} href={href.thread(chain.id, id)} onclick={event => openContext(event, id)}>in reply to {#if author && !host.blocked(author)}<Name address={author} />{' '}{/if}#{id}{#if ending} · {ENDING_LABEL[ending]}{/if}</a>
 {/snippet}
 
 {#snippet preview(display: PreviewLayout)}

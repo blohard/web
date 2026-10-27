@@ -14,6 +14,8 @@ import { oldestFirst } from '../../lib/board'
 export type ReplyViews = Map<bigint, {
   limit: number
   open: Record<string, boolean>
+  /** Replies already visible beyond a paging gap when this view was inherited. */
+  retained?: bigint[]
 }>
 
 /** A parent's retained replies and whether they still stand outside its list. */
@@ -215,6 +217,41 @@ export class RowExpansion {
       this.expansion.views.set(this.row, v)
     }
     return v
+  }
+
+  /** Copy just the clicked conversation into a thread; neither view owns the other's choices. */
+  inherit(root: bigint, preview: readonly Posted[]): ReplyViews {
+    const choices: ReplyViews = new Map([...this.views()].map(([id, view]) => [id, {
+      limit: view.limit, open: { ...view.open }, retained: [...(view.retained ?? [])],
+    }]))
+    const viewFor = (id: bigint) => {
+      let view = choices.get(id)
+      if (!view) { view = { limit: 20, open: {}, retained: [] }; choices.set(id, view) }
+      return view
+    }
+    for (const post of preview) {
+      if (post.parentId === 0n) continue
+      const view = viewFor(post.parentId)
+      if (!view.retained!.includes(post.id)) view.retained!.push(post.id)
+      view.open[post.id.toString()] = this.isOpen(post.id)
+    }
+    // A visible preview beneath a card becomes that card's opened branch.
+    // Explicit collapses still win, including over saved choices from an older mount.
+    const parents = new Set(preview.map(post => post.parentId))
+    for (const view of choices.values()) for (const id of Object.keys(view.open)) {
+      const post = BigInt(id)
+      view.open[id] = !this.isHidden(post) && (this.isOpen(post) || parents.has(post))
+    }
+    const inherited: ReplyViews = new Map()
+    const pending = [root]
+    while (pending.length) {
+      const id = pending.pop()!
+      if (inherited.has(id)) continue
+      const view = viewFor(id)
+      inherited.set(id, view)
+      for (const [child, open] of Object.entries(view.open)) if (open) pending.push(BigInt(child))
+    }
+    return inherited
   }
 
   /** Where the lists register themselves while on screen, for the stream's refresh cue. */

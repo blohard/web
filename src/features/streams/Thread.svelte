@@ -22,15 +22,13 @@
   import { wallet } from '../../lib/wallet.svelte'
   import InlineReply from '../publishing/InlineReply.svelte'
   import MessageCard from '../messages/MessageCard.svelte'
-  import Replies, { type ReplyViews } from './Replies.svelte'
+  import Replies from './Replies.svelte'
+  import { threadView } from './thread-view'
   import Retained from '../../shared/Retained.svelte'
 
   let { chain, id, commit, refreshRevision = 0, focusReply = false, focusReplies = false }: { chain: ChainInfo; id: bigint; commit?: Hex; refreshRevision?: number; focusReply?: boolean; focusReplies?: boolean } = $props()
 
-  type View = { ancestors: MessageRecord[]; branches: ReplyViews; repliesOpen: boolean; openAncestors: Record<string, boolean> }
-  const saved = untrack(() => router.visit.state<View>(`thread/${chain.id}/${chain.contract}/${id}`, () => ({
-    ancestors: [], branches: new Map(), repliesOpen: true, openAncestors: {},
-  })))
+  const saved = untrack(() => threadView(chain, id))
   const returning = visitReturning()
   const box = untrack(() => replying.box())
 

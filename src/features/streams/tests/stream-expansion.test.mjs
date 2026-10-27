@@ -302,3 +302,24 @@ test('resetting a stream without reply choices preserves its expansion record', 
   assert.notEqual(expansionOf(key), expansion)
   assert.equal(resetExpansion(key), false, 'repeated Home presses leave the fresh record alone')
 })
+
+test('a thread inherits only its visible conversation with detached paging and expansion choices', () => {
+  const row = new RowExpansion(expansionOf('inherit-thread'), 1n)
+  row.views().set(3n, { limit: 40, open: { '4': true }, retained: [4n, 5n] })
+  row.views().set(4n, { limit: 20, open: {}, retained: [6n] })
+  row.views().set(99n, { limit: 60, open: {}, retained: [100n] })
+  row.press(3n); row.press(4n)
+  const preview = [feedPost(2, 1, author), feedPost(3, 2, author)]
+  const inherited = row.inherit(1n, preview)
+  assert.deepEqual([...inherited.keys()].sort(), [1n, 2n, 3n, 4n])
+  assert.deepEqual(inherited.get(1n), { limit: 20, open: { '2': true }, retained: [2n] })
+  assert.equal(inherited.get(2n).open['3'], true)
+  assert.equal(inherited.get(3n).limit, 40)
+  inherited.get(3n).limit = 60
+  inherited.get(3n).open['4'] = false
+  inherited.get(3n).retained.push(7n)
+  assert.deepEqual(row.views().get(3n), { limit: 40, open: { '4': true }, retained: [4n, 5n] })
+  assert.equal(row.isOpen(4n), true)
+  row.hide(4n)
+  assert.equal(row.inherit(1n, preview).has(4n), false, 'a collapsed branch does not inherit stale nested choices')
+})
