@@ -43,7 +43,7 @@
       </div>
       {#if value.image}
         <!-- One button both shows and hides, so focus stays on it: while the image is hidden it fills the square. -->
-        <button class="small" class:reveal={!open} type="button" onclick={() => { chosen = !open; if (chosen) failedImage = false }}>{open ? 'hide' : 'show image'}</button>
+        <button class="small" class:reveal={!open} class:media-dismiss={open} aria-label={open ? 'hide image' : 'show image'} type="button" onclick={() => { chosen = !open; if (chosen) failedImage = false }}>{open ? 'hide' : 'show image'}</button>
       {/if}
     </div>
   </aside>
@@ -58,13 +58,13 @@
 <style>
   /* Like quotes, link cards use a tinted background. On a tinted post,
      such as a thread's focused one, they take the page colour instead (app.css). */
-  .link-preview { display: grid; grid-template-columns: minmax(0, 1fr) min(30%, 8rem); margin: .6rem 0; border: 1px solid var(--border); border-radius: .4rem; overflow: hidden; background: var(--tint); }
+  .link-preview { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) min(30%, 8rem); margin: .6rem 0; border: 1px solid var(--border); border-radius: .4rem; overflow: hidden; background: var(--tint); }
   .text { display: block; padding: .6rem .8rem; color: inherit; text-decoration: none; }
   .domain { display: block; height: 1.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); }
   .title, .description { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; line-height: 1.5; height: 3em; }
   .title { font-weight: bold; }
-  /* The image's square, and under it a row kept for its button. */
-  .thumbnail { display: grid; grid-template-rows: auto minmax(2.8rem, auto); place-items: center; padding: .6rem .6rem .6rem 0; align-self: center; min-width: 0; }
+  /* The reveal button shares the image square; dismissing needs no extra row. */
+  .thumbnail { display: grid; place-items: center; padding: .6rem .6rem .6rem 0; align-self: center; min-width: 0; }
   .thumbnail > button { white-space: normal; line-height: 1.2; }
   /* Transparent, so the square kept for an image is no empty box on a card without one. */
   .picture { grid-area: 1 / 1; width: 100%; aspect-ratio: 1; overflow: hidden; display: grid; place-items: center; }

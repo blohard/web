@@ -103,6 +103,7 @@ function imageToggle(el: HTMLElement, hash: Hex, anchor: Anchor | undefined, ope
   button.className = 'small'
   button.type = 'button'
   button.textContent = 'show picture'
+  button.ariaLabel = 'show picture'
   bar.append(label, ' ', button)
   const frame = document.createElement('div')
   frame.className = 'rec-image-stage'
@@ -123,6 +124,7 @@ function imageToggle(el: HTMLElement, hash: Hex, anchor: Anchor | undefined, ope
       frame.hidden = !hidden
       box.dataset.openedPicture = String(hidden && byReader)
       button.textContent = hidden ? 'hide picture' : 'show picture'
+      button.ariaLabel = button.textContent
       return
     }
     if (loading) {
@@ -141,6 +143,7 @@ function imageToggle(el: HTMLElement, hash: Hex, anchor: Anchor | undefined, ope
       frame.textContent = 'loading picture…'
       box.dataset.openedPicture = String(pressed)
       button.textContent = 'loading…'
+      button.ariaLabel = 'loading picture'
       // A picture that opens on its own waits for a shared slot; one the reader
       // pressed does not, nor one pressed while it waited.
       let release: (() => void) | null = null
@@ -170,7 +173,7 @@ function imageToggle(el: HTMLElement, hash: Hex, anchor: Anchor | undefined, ope
                 ? 'image failed verification, so it is not shown'
                 : `image could not be fetched (${content.detail})`
         if (content.reason === 'mismatch' || content.reason === 'taken_down') button.remove()
-        else button.textContent = 'retry picture'
+        else { button.textContent = 'retry picture'; button.ariaLabel = 'retry picture' }
         return
       }
       const d = decode(content.bytes)
@@ -192,6 +195,7 @@ function imageToggle(el: HTMLElement, hash: Hex, anchor: Anchor | undefined, ope
         frame.textContent = 'this picture could not be decoded'
         img = null
         button.textContent = 'retry picture'
+        button.ariaLabel = 'retry picture'
         settled()
       }
       const bytes = d.envelope.body.slice()
@@ -214,6 +218,7 @@ function imageToggle(el: HTMLElement, hash: Hex, anchor: Anchor | undefined, ope
       img = shown
       label.title = `${alt} (${fmtBytes(d.envelope.body.length)})`
       button.textContent = 'hide picture'
+      button.ariaLabel = 'hide picture'
       signal.addEventListener('abort', settled, { once: true })
       try {
         if (!signal.aborted) await decoded

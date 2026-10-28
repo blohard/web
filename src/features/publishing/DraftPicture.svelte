@@ -19,7 +19,7 @@
   <div class="rec-image-box" data-opened-picture={opened && !hidden}>
     <div class="rec-image-bar small">
       <span class="name">{label}</span>
-      <button type="button" class="small" onclick={() => { hidden = !hidden; opened = !hidden }}>{hidden ? 'show picture' : 'hide picture'}</button>
+      <button type="button" class="small" aria-label={hidden ? 'show picture' : 'hide picture'} onclick={() => { hidden = !hidden; opened = !hidden }}>{hidden ? 'show picture' : 'hide picture'}</button>
     </div>
     <div class="rec-image-stage" {hidden}>
       {#if failed}<span class="dim">this picture could not be decoded</span>

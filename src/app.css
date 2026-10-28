@@ -335,7 +335,7 @@ a.more { display: block; padding: 0.6rem 1rem 0.2rem 4.1rem; }
 .stream-paging p { margin: 0.5rem 0 0; }
 .stream-paging p:first-child { margin: 0; }
 @media (max-width: 600px) { .stream-paging button { min-height: calc(2lh + 1.4rem + 2px); } }
-/* Message bodies: images stay behind a click, the bar above them toggles; remote images are links. */
+/* Message bodies: closed pictures have a reveal bar; open pictures have an overlay control. */
 article.msg .body img { max-width: 100%; }
 .rec-image-box { margin: 0.4rem 0; }
 /* The picture's bar: framed and tinted with a picture mark, so a post with a picture is seen to have one. */
@@ -414,4 +414,26 @@ button > .spinner { position: absolute; left: 0; top: 50%; margin: -.4em 0 0; }
   article.msg .actions a.act, article.msg .actions button.act { padding-top: 0.4rem; padding-bottom: 0.4rem; }
   section.profile { flex-wrap: wrap; }
   .actions-col { flex-direction: row; width: 100%; gap: 1rem; }
+}
+
+/* Picture controls occupy no extra row once the picture is visible. */
+.rec-image-box:has(.rec-image-stage:not([hidden]) > img) { position: relative; width: fit-content; max-width: 100%; }
+.rec-image-box:has(.rec-image-stage:not([hidden]) > img) .rec-image-bar { display: contents; }
+.rec-image-box:has(.rec-image-stage:not([hidden]) > img) .rec-image-bar::before,
+.rec-image-box:has(.rec-image-stage:not([hidden]) > img) .rec-image-bar .name { display: none; }
+.rec-image-box:has(.rec-image-stage:not([hidden]) > img) .rec-image-stage { margin-top: 0; }
+/* The text remains the accessible name; the visual control is a compact cross. */
+:is(.rec-image-box:has(.rec-image-stage:not([hidden]) > img) .rec-image-bar button, button.media-dismiss) {
+  position: absolute; top: .25rem; right: .25rem; z-index: 1;
+  width: 2rem; height: 2rem; min-width: 0; padding: 0; font-size: 0;
+  display: grid; place-items: center; border: 1px solid var(--border); border-radius: .3rem;
+  background: var(--bg); color: var(--fg); cursor: pointer;
+}
+:is(.rec-image-box:has(.rec-image-stage:not([hidden]) > img) .rec-image-bar button, button.media-dismiss)::before { content: "×"; font-size: 1.4rem; line-height: 1; color: inherit; }
+:is(.rec-image-box:has(.rec-image-stage:not([hidden]) > img) .rec-image-bar button, button.media-dismiss)::after { content: none; }
+@media (hover: hover) and (pointer: fine) {
+  .rec-image-box:not(:hover):not(:focus-within) .rec-image-bar button,
+  .link-preview:not(:hover):not(:focus-within) button.media-dismiss { opacity: 0; }
+  /* Closed pictures must always advertise their reveal control. */
+  .rec-image-box:not(:has(.rec-image-stage:not([hidden]) > img)) .rec-image-bar button { opacity: 1; }
 }
