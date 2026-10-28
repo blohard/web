@@ -30,12 +30,13 @@
 
   const saved = untrack(() => threadView(chain, id))
   const returning = visitReturning()
-  const initialRevision = untrack(() => refreshRevision)
   const box = untrack(() => replying.box())
 
   let repliesLoading = $state(false)
   let localReloadRevision = $state(0)
   let reloadRevision = $derived(refreshRevision + localReloadRevision)
+  // Resume the saved snapshot only until this mount requests its first reload.
+  const initialReload = untrack(() => reloadRevision)
   // The post's own reply box is the page's shared one (features/publishing/replying.svelte.ts),
   // so it survives Back and Forward like every other. A reply link (?reply)
   // presses it on arrival, and so does a reply already begun elsewhere, say
@@ -118,7 +119,7 @@
   type Page = { root: RecordImage; parent: RecordImage | null; replies: ReplyPage; closed: boolean }
 
   async function load(id: bigint, revision: number): Promise<Page> {
-    const { record: root, gate, parent, replies } = await readThread(saved.sessions, chain, id, commit, returning && revision === initialRevision)
+    const { record: root, gate, parent, replies } = await readThread(saved.sessions, chain, id, commit, returning && revision === initialReload)
     const ending = endingOf(gate)
     return { root, parent, replies, closed: ending !== null }
   }
