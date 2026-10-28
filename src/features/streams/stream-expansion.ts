@@ -27,30 +27,28 @@ export function copyReplyViews(views: ReplyViews): ReplyViews {
   }]))
 }
 
-type RowState = { views: ReplyViews; sessions: ReplySessions; shown: Set<bigint>; mounts: Map<bigint, number> }
+type RowState = {
+  modes: SvelteMap<bigint, 'open' | 'hidden'>
+  previews: SvelteMap<bigint, Preview>
+  views: ReplyViews
+  sessions: ReplySessions
+  shown: Set<bigint>
+  mounts: Map<bigint, number>
+}
 
 /** A parent's retained replies and whether they still stand outside its list. */
 type Preview = { posts: readonly Posted[]; separate: boolean }
 
-export type Expansion = {
-  /** Explicit choices override the default preview. Branches under stream cards, keyed by row and post: the same post standing in two rows opens in each on its own. */
-  modes: SvelteMap<string, 'open' | 'hidden'>
-  /** Paging and nested choices inside the branches, per row, so two rows showing one post keep their own. */
-  rows: Map<bigint, RowState>
-  /** One saved placement per parent, within each row. Empty, non-separate entries remember dismissal. */
-  previews: Map<bigint, SvelteMap<bigint, Preview>>
-}
+/** Every row owns its branch choices, preview placement and loaded sessions. */
+export type Expansion = { rows: Map<bigint, RowState> }
 
 const expansions = new Map<string, Expansion>()
-
-/** One branch's place in a stream: the row it stands in and the post whose replies open. */
-const branchKey = (row: bigint, id: bigint): string => `${row}/${id}`
 
 /** The expansion record of a stream, created empty on first use. */
 export function expansionOf(key: string): Expansion {
   let e = expansions.get(key)
   if (!e) {
-    e = { modes: new SvelteMap(), rows: new Map(), previews: new Map() }
+    e = { rows: new Map() }
     expansions.set(key, e)
   }
   return e
@@ -59,35 +57,29 @@ export function expansionOf(key: string): Expansion {
 /** Reset saved choices only when present. Unchanged rows keep their mounted cards. */
 export function resetExpansion(key: string): boolean {
   const e = expansions.get(key)
-  if (!e || (!e.modes.size && ![...e.rows.values()].some(row => row.views.size) && ![...e.previews.values()].some(previews => previews.size))) return false
+  if (!e || ![...e.rows.values()].some(row => row.modes.size || row.views.size || row.previews.size)) return false
   // Mounted lists finish against their old record.
   return expansions.delete(key)
 }
 
 /** The posts whose branches a stream has open, whichever rows they stand in; empty without creating a record. */
 export function openRoots(key: string): ReadonlySet<bigint> {
-  const e = expansions.get(key)
-  return new Set([...(e?.modes ?? [])].filter(([, mode]) => mode === 'open').map(([k]) => BigInt(k.slice(k.indexOf('/') + 1))))
+  const roots = new Set<bigint>()
+  for (const row of expansions.get(key)?.rows.values() ?? []) {
+    for (const [id, mode] of row.modes) if (mode === 'open') roots.add(id)
+  }
+  return roots
 }
 
 /** Read an existing row choice without creating an expansion record. */
 export const branchOpen = (key: string, row: bigint, id: bigint): boolean =>
-  expansions.get(key)?.modes.get(branchKey(row, id)) === 'open'
+  expansions.get(key)?.rows.get(row)?.modes.get(id) === 'open'
 
 /** Each open row keeps its own session, even when another row shows the same post. */
 function openRows(key: string) {
-  const e = expansions.get(key)
-  const rows = new Map<bigint, Set<bigint>>()
-  for (const [key, mode] of e?.modes ?? []) {
-    if (mode !== 'open') continue
-    const [row, id] = key.split('/').map(BigInt)
-    const roots = rows.get(row) ?? new Set<bigint>()
-    roots.add(id)
-    rows.set(row, roots)
-  }
-  return [...rows].flatMap(([row, roots]) => {
-    const state = e?.rows.get(row)
-    return state ? [{ ...state, roots }] : []
+  return [...(expansions.get(key)?.rows.values() ?? [])].flatMap(state => {
+    const roots = new Set([...state.modes].filter(([, mode]) => mode === 'open').map(([id]) => id))
+    return roots.size ? [{ ...state, roots }] : []
   })
 }
 
@@ -120,7 +112,8 @@ export function collapsedParents(key: string, rows: readonly ConversationRowData
   const hidden = new Set<bigint>(), visible = new Set<bigint>()
   if (!expansion) return hidden
   for (const row of rows) {
-    const collapsed = (id: bigint) => expansion.modes.get(branchKey(row.key, id)) === 'hidden'
+    const modes = expansion.rows.get(row.key)?.modes
+    const collapsed = (id: bigint) => modes?.get(id) === 'hidden'
     const rootHidden = collapsed(row.root.id)
     const concealed = new Set<bigint>()
     if (rootHidden) hidden.add(row.root.id)
@@ -144,40 +137,40 @@ export function collapsedParents(key: string, rows: readonly ConversationRowData
  */
 export class RowExpansion {
   private readonly arrived = new SvelteMap<bigint, bigint>()
-  private readonly previews: SvelteMap<bigint, Preview>
   private readonly state: RowState
-  constructor(private readonly expansion: Expansion, readonly row: bigint) {
-    this.previews = expansion.previews.get(row) ?? new SvelteMap()
-    expansion.previews.set(row, this.previews)
-    this.state = expansion.rows.get(row) ?? { views: new Map(), sessions: new Map(), shown: new Set(), mounts: new Map() }
+  constructor(expansion: Expansion, readonly row: bigint) {
+    this.state = expansion.rows.get(row) ?? {
+      modes: new SvelteMap(), previews: new SvelteMap(), views: new Map(),
+      sessions: new Map(), shown: new Set(), mounts: new Map(),
+    }
     expansion.rows.set(row, this.state)
   }
 
   /** Keep visible cards without fetching ancestors or opening any branches. */
   retain(posts: readonly Posted[]): void {
     for (const post of posts) {
-      const kept = this.previews.get(post.parentId) ?? { posts: [], separate: true }
+      const kept = this.state.previews.get(post.parentId) ?? { posts: [], separate: true }
       if (!kept.posts.some(r => r.id === post.id)) {
-        this.previews.set(post.parentId, { ...kept, posts: [...kept.posts, post] })
+        this.state.previews.set(post.parentId, { ...kept, posts: [...kept.posts, post] })
       }
     }
   }
 
   /** The parent's list keeps these cards even when they fall past its first page. */
   retained(parent: bigint): readonly Posted[] {
-    return this.previews.get(parent)?.posts ?? []
+    return this.state.previews.get(parent)?.posts ?? []
   }
 
   /** Cards whose own parent's list has not taken them over. */
   remaining(): Posted[] {
-    return [...this.previews.values()].flatMap(v => v.separate ? v.posts : []).sort(oldestFirst)
+    return [...this.state.previews.values()].flatMap(v => v.separate ? v.posts : []).sort(oldestFirst)
   }
 
   /** Hide a preview copy only after its parent's loaded list is showing it. */
   listShown(parent: bigint): void {
-    const kept = this.previews.get(parent)
+    const kept = this.state.previews.get(parent)
     if (kept?.separate === false) return
-    this.previews.set(parent, { posts: kept?.posts ?? [], separate: false })
+    this.state.previews.set(parent, { posts: kept?.posts ?? [], separate: false })
   }
 
   /** Only relationships already in the preview matter; never read ancestors. */
@@ -188,7 +181,7 @@ export class RowExpansion {
         hidden.add(post.id)
         return false
       }
-      return this.previews.get(post.parentId)?.separate !== false
+      return this.state.previews.get(post.parentId)?.separate !== false
     })
   }
 
@@ -209,32 +202,31 @@ export class RowExpansion {
   }
 
   isOpen(id: bigint): boolean {
-    return this.expansion.modes.get(branchKey(this.row, id)) === 'open'
+    return this.state.modes.get(id) === 'open'
   }
 
   isHidden(id: bigint): boolean {
-    return this.expansion.modes.get(branchKey(this.row, id)) === 'hidden'
+    return this.state.modes.get(id) === 'hidden'
   }
 
   /** Hide both the automatic preview and any opened list. */
   hide(id: bigint, wholeRow = false): void {
-    this.expansion.modes.set(branchKey(this.row, id), 'hidden')
+    this.state.modes.set(id, 'hidden')
     this.arrived.delete(id)
     // Dismiss the known preview beneath this card; no missing ancestors are read.
     const dismissed = new Set([id])
-    const posts = [...this.previews.values()].flatMap(v => v.posts).sort(oldestFirst)
+    const posts = [...this.state.previews.values()].flatMap(v => v.posts).sort(oldestFirst)
     for (const post of posts) if (dismissed.has(post.parentId)) dismissed.add(post.id)
-    for (const parent of this.previews.keys()) {
-      if (wholeRow || dismissed.has(parent)) this.previews.set(parent, { posts: [], separate: false })
+    for (const parent of this.state.previews.keys()) {
+      if (wholeRow || dismissed.has(parent)) this.state.previews.set(parent, { posts: [], separate: false })
     }
-    this.previews.set(id, { posts: [], separate: false })
+    this.state.previews.set(id, { posts: [], separate: false })
   }
 
   /** Open a card's branch, or fold it and forget any reply revealed there. */
   press(id: bigint, wholeRow = false): void {
-    const key = branchKey(this.row, id)
     if (this.isOpen(id)) this.hide(id, wholeRow)
-    else this.expansion.modes.set(key, 'open')
+    else this.state.modes.set(id, 'open')
   }
 
   /**
@@ -243,7 +235,7 @@ export class RowExpansion {
    * the accounts it was given.
    */
   landed(id: bigint, replyId: bigint): void {
-    this.expansion.modes.set(branchKey(this.row, id), 'open')
+    this.state.modes.set(id, 'open')
     this.arrived.set(id, replyId)
   }
 
