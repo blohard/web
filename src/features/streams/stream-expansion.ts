@@ -28,7 +28,9 @@ export function copyReplyViews(views: ReplyViews): ReplyViews {
 }
 
 type RowState = {
+  /** Explicit choices override the default preview. */
   modes: SvelteMap<bigint, 'open' | 'hidden'>
+  /** Empty, non-separate entries remember dismissal. */
   previews: SvelteMap<bigint, Preview>
   views: ReplyViews
   sessions: ReplySessions

@@ -472,7 +472,7 @@ test('Back and Forward restore their visit; a fresh link and a browser reload st
   profileVisit.state('profile/board', () => ({ tab: 'posts' }), value => value).tab = 'replies'
   go('/p/1/7')
   const threadVisit = router.visit
-  threadVisit.state('thread/board', () => ({ ancestors: [6n], branches: new Map([[8n, { limit: 40, open: { 9: true } }]]) }), value => value)
+  threadVisit.state('thread/board', () => ({ ancestors: [6n], branches: new Map([[8n, { limit: 40, open: { 9: true }, retained: [] }]]) }), value => value)
   go('/p/1/7?reply')
   assert.equal(router.visit, threadVisit, 'reply is an action in the same visit')
   go('/p/1/8')
