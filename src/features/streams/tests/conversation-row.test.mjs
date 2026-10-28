@@ -166,7 +166,7 @@ test('nested lists join only the first card, until an editor interrupts that joi
   const first = await replySlice(mock.chain, root.replies, 1n, 20)
   view.values.set(`${view.prefix}/1`, first)
   view.values.set(`${view.prefix}/2`, await replySlice(mock.chain, first.children, 2n, 20))
-  const props = { parentId: 1n, data: root.replies, separator: false, views: new Map([[1n, { limit: 20, open: { 2: true } }]]) }
+  const props = { parentId: 1n, data: root.replies, separator: false, views: new Map([[1n, { limit: 20, open: { 2: true }, retained: [] }]]) }
   const draw = async () => separators(await view.render('Replies', props))
   assert.deepEqual(await draw(), [[2, false], [4, false], [3, true]])
   const box = replying.box()
@@ -185,7 +185,7 @@ test('a paging gap gives the first displayed reply its own separator', async t =
   assert.equal(slice.tailStart, 24n)
   view.values.set(`${view.prefix}/1`, slice)
   const html = await view.render('Replies', { parentId: 1n, data: root.replies, separator: false, reveal: 24n,
-    views: new Map([[1n, { limit: 0, open: {} }]]) })
+    views: new Map([[1n, { limit: 0, open: {}, retained: [] }]]) })
   assert.deepEqual(ids(html), [24], 'the gap must precede the first card, not an already separated sibling')
   assert.match(html, /your new reply is below/)
   assert.deepEqual(separators(html), [[24, true]])

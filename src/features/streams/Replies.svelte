@@ -187,7 +187,7 @@
     target.views.set(target.parentId, {
       limit: Math.max(requested, rows.result?.value.loaded ?? 0),
       open: rowx ? Object.fromEntries(list.map(r => [r.id.toString(), rowx.isOpen(r.id)])) : $state.snapshot(open),
-      retained: rowx ? list.map(r => r.id) : saved?.retained,
+      retained: rowx ? list.map(r => r.id) : saved?.retained ?? [],
     })
   }
   // A context link can snapshot the stream before these lists unmount.

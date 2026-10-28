@@ -116,9 +116,9 @@ test('two rows showing one post open on their own and keep their own paging and 
   a.press(1n)
   assert.equal(b.isOpen(1n), false, 'the other row stays folded')
   assert.deepEqual([...openRoots('rows/views')], [1n], 'the cue still knows the one post')
-  a.views().set(1n, { limit: 40, open: { 5: true } })
+  a.views().set(1n, { limit: 40, open: { 5: true }, retained: [] })
   assert.equal(b.views().get(1n), undefined, 'paging and nesting are the row\'s own')
-  b.views().set(1n, { limit: 20, open: {} })
+  b.views().set(1n, { limit: 20, open: {}, retained: [] })
   const preview = [feedPost(2, 1)]
   a.retain(preview); b.retain(preview)
   a.listShown(1n)
@@ -127,8 +127,8 @@ test('two rows showing one post open on their own and keep their own paging and 
   assert.deepEqual(new RowExpansion(expansion, 7n).retained(1n), preview, 'Back preserves the list pin')
   assert.deepEqual(new RowExpansion(expansion, 8n).remaining(), preview, 'Back preserves the separate preview')
   // Back mounts new handles for the same rows and finds each row's choices.
-  assert.deepEqual(new RowExpansion(expansion, 7n).views().get(1n), { limit: 40, open: { 5: true } })
-  assert.deepEqual(new RowExpansion(expansion, 8n).views().get(1n), { limit: 20, open: {} })
+  assert.deepEqual(new RowExpansion(expansion, 7n).views().get(1n), { limit: 40, open: { 5: true }, retained: [] })
+  assert.deepEqual(new RowExpansion(expansion, 8n).views().get(1n), { limit: 20, open: {}, retained: [] })
 })
 
 test('hiding a preview survives remounts, reopening and posting restore the branch', () => {
@@ -184,7 +184,7 @@ test('preview adoption and collapse stay within the clicked branch across Back',
   assert.deepEqual(rowx.preview(posts).map(p => p.id), [2n, 4n, 5n], 'only the ready direct list takes its card')
   assert.deepEqual(rowx.remaining().map(p => p.id), [2n, 4n, 5n])
   // Saving a list's paging on unmount cannot overwrite preview placement or pins.
-  rowx.views().set(2n, { limit: 40, open: {} })
+  rowx.views().set(2n, { limit: 40, open: {}, retained: [] })
   const resumed = new RowExpansion(expansion, 1n)
   assert.deepEqual(resumed.remaining().map(p => p.id), [2n, 4n, 5n])
   assert.deepEqual(resumed.retained(2n).map(p => p.id), [3n])
@@ -269,7 +269,7 @@ test('explicit refresh resets only its stream, including nested choices and reta
   old.landed(1n, 3n)
   old.hide(2n)
   old.retain([feedPost(3, 1, stranger)])
-  old.views().set(1n, { limit: 60, open: { 3: true } })
+  old.views().set(1n, { limit: 60, open: { 3: true }, retained: [] })
   const unmountOld = old.watch(1n)
   const other = new RowExpansion(expansionOf(otherKey), 1n)
   other.press(1n)

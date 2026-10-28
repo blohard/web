@@ -17,8 +17,15 @@ export type ReplyViews = Map<bigint, {
   limit: number
   open: Record<string, boolean>
   /** Replies already visible beyond a paging gap when this view was inherited. */
-  retained?: bigint[]
+  retained: bigint[]
 }>
+
+/** Copy paging choices without sharing their mutable arrays or open flags. */
+export function copyReplyViews(views: ReplyViews): ReplyViews {
+  return new Map([...views].map(([id, view]) => [id, {
+    limit: view.limit, open: { ...view.open }, retained: [...view.retained],
+  }]))
+}
 
 type RowState = { views: ReplyViews; sessions: ReplySessions; shown: Set<bigint>; mounts: Map<bigint, number> }
 
@@ -254,9 +261,7 @@ export class RowExpansion {
 
   /** Copy just the clicked conversation into a thread; neither view owns the other's choices. */
   inherit(root: bigint, preview: readonly Posted[]): ReplyViews {
-    const choices: ReplyViews = new Map([...this.views()].map(([id, view]) => [id, {
-      limit: view.limit, open: { ...view.open }, retained: [...(view.retained ?? [])],
-    }]))
+    const choices = copyReplyViews(this.views())
     const viewFor = (id: bigint) => {
       let view = choices.get(id)
       if (!view) { view = { limit: 20, open: {}, retained: [] }; choices.set(id, view) }
@@ -265,7 +270,7 @@ export class RowExpansion {
     for (const post of preview) {
       if (post.parentId === 0n) continue
       const view = viewFor(post.parentId)
-      if (!view.retained!.includes(post.id)) view.retained!.push(post.id)
+      if (!view.retained.includes(post.id)) view.retained.push(post.id)
       view.open[post.id.toString()] = this.isOpen(post.id)
     }
     // A visible preview beneath a card becomes that card's opened branch.
