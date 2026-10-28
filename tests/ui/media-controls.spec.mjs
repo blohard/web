@@ -28,9 +28,6 @@ for (const touch of [false, true]) test.describe(touch ? 'touch media controls' 
       if (!touch) {
         await container.hover()
         await expect(hide).toHaveCSS('opacity', '1')
-        await page.mouse.move(0, 0)
-        await hide.focus()
-        await expect(hide).toHaveCSS('opacity', '1')
       }
       const bounds = await container.boundingBox(), button = await hide.boundingBox()
       expect(button.x + button.width).toBeLessThanOrEqual(bounds.x + bounds.width)
@@ -41,9 +38,22 @@ for (const touch of [false, true]) test.describe(touch ? 'touch media controls' 
       const show = container.getByRole('button', { name: showName, exact: true })
       await expect(show).toBeVisible()
       await expect(show).toBeFocused()
-      await show.press('Enter')
+      await show.click()
       await expect(image).toBeVisible()
       await expect(container.getByRole('button', { name: hideName, exact: true })).toBeFocused()
+      if (!touch) {
+        await page.mouse.move(0, 0)
+        await expect(hide).toBeFocused()
+        await expect(hide).toHaveCSS('opacity', '0')
+        await page.keyboard.press('Tab')
+        await page.keyboard.press('Shift+Tab')
+        await expect(hide).toBeFocused()
+        await expect(hide).toHaveCSS('opacity', '1')
+        await hide.press('Enter')
+        await show.press('Enter')
+        await expect(image).toBeVisible()
+        await expect(hide).toHaveCSS('opacity', '1')
+      }
       await expect(page.locator('.lightbox')).toHaveCount(0)
       await expect(page).toHaveURL('http://127.0.0.1:8790/')
     }

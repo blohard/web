@@ -432,8 +432,8 @@ button > .spinner { position: absolute; left: 0; top: 50%; margin: -.4em 0 0; }
 :is(.rec-image-box:has(.rec-image-stage:not([hidden]) > img) .rec-image-bar button, button.media-dismiss)::before { content: "×"; font-size: 1.4rem; line-height: 1; color: inherit; }
 :is(.rec-image-box:has(.rec-image-stage:not([hidden]) > img) .rec-image-bar button, button.media-dismiss)::after { content: none; }
 @media (hover: hover) and (pointer: fine) {
-  .rec-image-box:not(:hover):not(:focus-within) .rec-image-bar button,
-  .link-preview:not(:hover):not(:focus-within) button.media-dismiss { opacity: 0; }
+  .rec-image-box:not(:hover):not(:has(:focus-visible)) .rec-image-bar button,
+  .link-preview:not(:hover):not(:has(:focus-visible)) button.media-dismiss { opacity: 0; }
   /* Closed pictures must always advertise their reveal control. */
   .rec-image-box:not(:has(.rec-image-stage:not([hidden]) > img)) .rec-image-bar button { opacity: 1; }
 }
