@@ -2,6 +2,9 @@
 
 For file locations and common changes, start with the [frontend guide](README.md).
 
+Every `Visit.state` caller supplies a copy function: copy mutable view state, or
+explicitly retain shared stream data. There is no implicit sharing default.
+
 Keep these lifetimes separate. A URL, a visit to that URL, a draft, and a
 publication are different identities. Navigation must not transfer an active
 publication to the new page or replay its focus/reveal commands.

@@ -206,7 +206,7 @@ test('a keyring URL selects its pane without a wallet even if a different pane w
   router.visit = new Visit(100)
   const render = () => renderComponent('features/keys/KeyringManagement.svelte', { chain: mock.chain, account, market, initialSide: 'holders' })
   assert.match(await render(), /aria-current="page"[^>]*>their key holders/)
-  const place = router.visit.state(`keyring/${mock.chain.id}/${account}`, () => assert.fail('visit must already be saved'))
+  const place = router.visit.state(`keyring/${mock.chain.id}/${account}`, () => assert.fail('visit must already be saved'), value => value)
   assert.equal(place.side, 'holders')
   place.side = 'holding'
   assert.match(await render(), /aria-current="page"[^>]*>their key holders/)

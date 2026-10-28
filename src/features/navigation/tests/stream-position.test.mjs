@@ -469,44 +469,44 @@ test('Back and Forward restore their visit; a fresh link and a browser reload st
   const profile = '/u/1/0x1111111111111111111111111111111111111111'
   go(profile)
   const profileVisit = router.visit
-  profileVisit.state('profile/board', () => ({ tab: 'posts' })).tab = 'replies'
+  profileVisit.state('profile/board', () => ({ tab: 'posts' }), value => value).tab = 'replies'
   go('/p/1/7')
   const threadVisit = router.visit
-  threadVisit.state('thread/board', () => ({ ancestors: [6n], branches: new Map([[8n, { limit: 40, open: { 9: true } }]]) }))
+  threadVisit.state('thread/board', () => ({ ancestors: [6n], branches: new Map([[8n, { limit: 40, open: { 9: true } }]]) }), value => value)
   go('/p/1/7?reply')
   assert.equal(router.visit, threadVisit, 'reply is an action in the same visit')
   go('/p/1/8')
   history.back()
   assert.equal(router.visit, threadVisit)
-  assert.deepEqual(router.visit.state('thread/board', () => null).ancestors, [6n])
-  assert.equal(router.visit.state('thread/board', () => null).branches.get(8n).limit, 40)
+  assert.deepEqual(router.visit.state('thread/board', () => null, value => value).ancestors, [6n])
+  assert.equal(router.visit.state('thread/board', () => null, value => value).branches.get(8n).limit, 40)
   history.back() // remove ?reply, same mounted page
   assert.equal(router.visit, threadVisit)
   history.back()
   assert.equal(router.visit, profileVisit)
-  assert.equal(router.visit.state('profile/board', () => null).tab, 'replies')
+  assert.equal(router.visit.state('profile/board', () => null, value => value).tab, 'replies')
   history.forward()
   assert.equal(router.visit, threadVisit)
   history.back()
   go('/p/1/7')
   assert.notEqual(router.visit, threadVisit, 'a new link to that URL is a fresh thread')
-  assert.equal(router.visit.state('thread/board', () => null), null)
+  assert.equal(router.visit.state('thread/board', () => null, value => value), null)
   history.back()
   assert.equal(router.visit, profileVisit)
 
   const reloaded = await load('features/navigation/router.svelte.ts?back-reloaded')
-  assert.equal(reloaded.router.visit.state('profile/board', () => null), null, 'history markers contain no saved UI state')
+  assert.equal(reloaded.router.visit.state('profile/board', () => null, value => value), null, 'history markers contain no saved UI state')
 })
 
 test('old visits are bounded and revisiting an evicted entry starts with default UI state', () => {
   const visits = new Visits(2)
-  visits.current.state('thread', () => ({ open: true }))
+  visits.current.state('thread', () => ({ open: true }), value => value)
   const oldest = visits.entry
   visits.move(null, false)
   const middle = visits.current, middleEntry = visits.entry
   visits.move(null, false)
   assert.equal(visits.move(middleEntry, false), middle)
-  assert.equal(visits.move(oldest, false).state('thread', () => null), null)
+  assert.equal(visits.move(oldest, false).state('thread', () => null, value => value), null)
 })
 
 test('a thread bookmark follows a nested reply when the restored branch arrives later', (t) => {
@@ -749,15 +749,15 @@ test('a long page keeps its place per visit: a fresh visit starts at the top and
 test('sidebar returns restore the latest retained visit without another state cache', () => {
   const visits = new Visits(3, 'home')
   const home = visits.current
-  const state = home.state('selection', () => ({ tab: 'keyring', side: 'holders' }))
+  const state = home.state('selection', () => ({ tab: 'keyring', side: 'holders' }), value => value)
   visits.move(null, false, 'profile')
   assert.notEqual(visits.move(null, false, 'home', true), home)
-  assert.equal(visits.current.state('selection', () => null), state)
+  assert.equal(visits.current.state('selection', () => null, value => value), state)
   const nextHome = visits.move(null, false, 'home')
   assert.notEqual(nextHome, home, 'ordinary links are still fresh visits')
-  const latestState = nextHome.state('snapshot', () => ({ rows: [3] }))
+  const latestState = nextHome.state('snapshot', () => ({ rows: [3] }), value => value)
   visits.move(null, false, 'profile', true)
-  assert.equal(visits.move(null, false, 'home', true).state('snapshot', () => null), latestState, 'most recent visit wins')
+  assert.equal(visits.move(null, false, 'home', true).state('snapshot', () => null, value => value), latestState, 'most recent visit wins')
   visits.move(null, false, 'other')
   visits.move(null, false, 'another')
   visits.move(null, false, 'last')
@@ -806,14 +806,14 @@ test('sidebar returns keep shown rows but start at the top without changing Back
 test('resumed visits copy tab choices but share retained data', () => {
   const visits = new Visits(10, 'home'), home = visits.current, entry = visits.entry
   const selection = home.state('selection', () => ({ tab: 'following' }), value => ({ ...value }))
-  const snapshot = home.state('snapshot', () => ({ rows: [1, 2] }))
+  const snapshot = home.state('snapshot', () => ({ rows: [1, 2] }), value => value)
   visits.move(null, false, 'thread')
   const resumed = visits.move(null, false, 'home', true)
-  const next = resumed.state('selection', () => null)
+  const next = resumed.state('selection', () => null, value => value)
   assert.deepEqual(next, selection)
   next.tab = 'everyone'
-  assert.equal(visits.move(entry, false, 'home').state('selection', () => null).tab, 'following')
-  assert.equal(resumed.state('snapshot', () => null), snapshot)
+  assert.equal(visits.move(entry, false, 'home').state('selection', () => null, value => value).tab, 'following')
+  assert.equal(resumed.state('snapshot', () => null, value => value), snapshot)
 })
 
 test('the holders link starts its own visit and Back restores the previous keyring', async t => {
@@ -823,14 +823,14 @@ test('the holders link starts its own visit and Back restores the previous keyri
   const go = url => { router.go(url); b.input('hashchange') }
   go(href.keyring(84532, account))
   const holdingsVisit = router.visit
-  holdingsVisit.state('selection', () => ({ side: 'holding', page: 2 }))
+  holdingsVisit.state('selection', () => ({ side: 'holding', page: 2 }), value => value)
   go(href.keyHolders(84532, account))
   assert.equal(router.route.holders, true)
   assert.notEqual(router.visit, holdingsVisit)
   const holdersVisit = router.visit
   history.back()
   assert.equal(router.visit, holdingsVisit)
-  assert.equal(router.visit.state('selection', () => null).page, 2)
+  assert.equal(router.visit.state('selection', () => null, value => value).page, 2)
   history.forward()
   assert.equal(router.visit, holdersVisit)
   assert.equal(router.route.holders, true)

@@ -8,8 +8,8 @@ export class Visit {
 
   constructor(readonly id: number, public page = '', public url = '', readonly previous: number | null = null) {}
 
-  /** Retained data can be shared; bookmarks and selections supply a copy for a new history entry. */
-  state<T>(key: string, initial: () => T, copy: (value: T, keepPosition: boolean) => T = value => value): T {
+  /** Every caller explicitly copies its view state or shares retained data with the new entry. */
+  state<T>(key: string, initial: () => T, copy: (value: T, keepPosition: boolean) => T): T {
     if (!this.values.has(key)) this.values.set(key, { value: initial(), copy: (value, keepPosition) => copy(value as T, keepPosition) })
     return this.values.get(key)!.value as T
   }

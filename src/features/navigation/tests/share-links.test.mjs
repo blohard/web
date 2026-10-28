@@ -152,23 +152,23 @@ test('profile replies have their own URL and visit, restored by Back and Forward
   }
   router.go(href.user(84532, address))
   const posts = router.visit
-  posts.state('bookmark', () => ({ y: 500 }))
+  posts.state('bookmark', () => ({ y: 500 }), value => value)
   router.go(path)
   const replies = router.visit
   assert.notEqual(posts, replies)
   assert.equal(router.page, `user/84532/${address}/replies`)
-  replies.state('bookmark', () => ({ y: 900 }))
+  replies.state('bookmark', () => ({ y: 900 }), value => value)
   router.go(path)
   assert.equal(router.visit, replies, 'pressing the selected tab does not leave it')
   router.go(href.userKeys(84532, address))
   history.back()
   assert.equal(router.route.replies, true)
   assert.equal(router.visit, replies)
-  assert.equal(router.visit.state('bookmark', () => null).y, 900)
+  assert.equal(router.visit.state('bookmark', () => null, value => value).y, 900)
   history.back()
   assert.equal(router.route.replies, undefined)
   assert.equal(router.visit, posts)
-  assert.equal(router.visit.state('bookmark', () => null).y, 500)
+  assert.equal(router.visit.state('bookmark', () => null, value => value).y, 500)
   history.forward()
   assert.equal(router.route.replies, true)
   assert.equal(router.visit, replies)
@@ -193,11 +193,11 @@ test('profile tab clicks replace one visit: Back leaves the profile and Forward 
   const address = `0x${'34'.repeat(20)}`
   router.go('/p/84532/888')
   const source = router.visit
-  source.state('bookmark', () => ({ y: 1200 }))
+  source.state('bookmark', () => ({ y: 1200 }), value => value)
   router.go(href.user(84532, address))
   const profile = router.visit
   const count = entries.length, index = cursor, marker = { ...history.state.blohard }
-  const streams = profile.state('streams', () => new Map([['posts', { y: 500, limit: 40 }]]))
+  const streams = profile.state('streams', () => new Map([['posts', { y: 500, limit: 40 }]]), value => value)
   for (const path of [href.userReplies(84532, address), href.userKeys(84532, address), href.user(84532, address), href.userReplies(84532, address)]) {
     assert.equal(clickProfileLink(path).defaultPrevented, true)
     assert.equal(location.pathname, path)
@@ -206,7 +206,7 @@ test('profile tab clicks replace one visit: Back leaves the profile and Forward 
     assert.deepEqual(history.state.blohard, marker, 'the visit marker stays fixed')
     assert.equal(router.visit, profile)
     assert.equal(profile.page, router.page, 'the retained visit names the currently selected tab')
-    assert.equal(profile.state('streams', () => null), streams)
+    assert.equal(profile.state('streams', () => null, value => value), streams)
   }
   clickProfileLink(href.userReplies(84532, address))
   assert.equal(entries.length, count, 'the selected tab adds no step either')
@@ -216,11 +216,11 @@ test('profile tab clicks replace one visit: Back leaves the profile and Forward 
   assert.equal(router.visit, profile)
   history.back()
   assert.equal(router.visit, source)
-  assert.equal(router.visit.state('bookmark', () => null).y, 1200)
+  assert.equal(router.visit.state('bookmark', () => null, value => value).y, 1200)
   history.forward()
   assert.equal(router.route.replies, true)
   assert.equal(router.visit, profile)
-  assert.deepEqual(profile.state('streams', () => null).get('posts'), { y: 500, limit: 40 })
+  assert.deepEqual(profile.state('streams', () => null, value => value).get('posts'), { y: 500, limit: 40 })
 })
 
 test('only marked links within the same profile replace history', () => {

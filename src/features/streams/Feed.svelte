@@ -35,9 +35,10 @@
   const place = visitPlace()
   const positions = place.streams
   const market = $derived(filter.kind === 'timeline' && !filter.curatedOnly ? host.keyringMarket(chain.id) : null)
+  // Retained activity belongs to the stream, just like its post snapshot.
   const activity = $derived.by(() => {
     const current = chain, address = market, key = feedKey(chain, filter)
-    return address ? untrack(() => visit.state(`everyone-activity/${key}/${address}`, () => new EveryoneActivity(current, address))) : null
+    return address ? untrack(() => visit.state(`everyone-activity/${key}/${address}`, () => new EveryoneActivity(current, address), value => value)) : null
   })
   $effect(() => {
     const current = activity, changed = onactivitychange

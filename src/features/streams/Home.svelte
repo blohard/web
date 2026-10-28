@@ -96,7 +96,8 @@
   /** A curated tab without a host list falls back to everyone. */
   const keyringMarket = $derived(host.keyringMarket(chain.id))
   const keyringIdentity = $derived(`${chain.id}/${keyringMarket}/${wallet.account}`)
-  const keyring = $derived.by(() => { void keyringIdentity; return untrack(() => visit.state(`home-keyring/${chain.contract}/${keyringIdentity}`, () => new KeyringView())) })
+  // Membership snapshots stay shared; the selected tab and side are copied above.
+  const keyring = $derived.by(() => { void keyringIdentity; return untrack(() => visit.state(`home-keyring/${chain.contract}/${keyringIdentity}`, () => new KeyringView(), value => value)) })
   const keyringError = $derived(keyring.error)
   const activated = $derived(keyring.shown?.active ?? false)
   const keyringActive = $derived(keyring.available)
