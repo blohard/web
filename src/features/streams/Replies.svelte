@@ -118,8 +118,8 @@
   /** How many replies a page of the list shows before "show more" (CLIENT.md). */
   const PAGE = 20
   const rows = new Resource<ReplySlice>()
-  const target = untrack(() => ({ views, parentId }))
-  const saved = target.views?.get(target.parentId)
+  const target = untrack(() => ({ views: rowx?.views() ?? views, parentId }))
+  const saved = target.views.get(target.parentId)
   let requested = $state(saved?.limit ?? PAGE)
   let again = $state(0)
   let identity = $derived(`${chain.id}/${chain.contract}/${parentId}`)

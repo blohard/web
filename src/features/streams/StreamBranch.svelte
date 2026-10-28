@@ -36,7 +36,6 @@
     displayed?: boolean
   } = $props()
 
-  const views = untrack(() => rowx.views())
   untrack(() => rowx.retain(preview))
   let ready = $state(false)
   onDestroy(() => onready?.(false))
@@ -60,6 +59,6 @@
 <Retained settleFirstScreen {request} {identity} loading={loadingReplies} what="replies" onretry={() => again++}>
   {#snippet children(page)}
     <!-- The card above folds it again with its own reply count. -->
-    <Replies {kept} {remaining} {rowx} {displayed} resume={opening.resume && reloadKey === opening.key} {separator} onready={() => { ready = true; onready?.(true) }} onvisible={parent => rowx.listShown(parent)} {onloading} {waited} {gateRefreshReady} {chain} parentId={id} data={page.replies} {views} reveal={rowx.reveal(id)} {onchanged} />
+    <Replies {kept} {remaining} {rowx} {displayed} resume={opening.resume && reloadKey === opening.key} {separator} onready={() => { ready = true; onready?.(true) }} onvisible={parent => rowx.listShown(parent)} {onloading} {waited} {gateRefreshReady} {chain} parentId={id} data={page.replies} reveal={rowx.reveal(id)} {onchanged} />
   {/snippet}
 </Retained>
