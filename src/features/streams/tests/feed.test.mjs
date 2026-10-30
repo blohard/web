@@ -278,18 +278,17 @@ for (const gate of [TOMBSTONE, REMOVED]) test(`a surviving descendant of ${gate}
 /** A message outside the feed pages, returned by a host context read. */
 const record = (id, who, parentId) => mock.messages.set(BigInt(id), { author: who, parentId: BigInt(parentId), timestamp: 0n, contentHash: hash('66') })
 
-test('a stranger parent separates a followed reply from a followed ancestor', async () => {
+test('displayed stranger context joins a followed reply to its visible ancestor', async () => {
   const followed = address('99'), stranger = address('88')
   // #1 the followed post; #2 a stranger's reply to it, which the feed does not select; #3 the followed author's reply to #2.
   feedHistory([feedPost(1, 0, followed), feedPost(2, 1, stranger), feedPost(3, 2, followed)])
   record(2, stranger, 1)
   const page = await loadFeed(mock.chain, { kind: 'following', includeRepliesToViewer: true, authors: [followed], viewer: author })
-  assert.deepEqual(ids(page.rows.map((r) => r.lead)), [3, 1])
-  assert.equal(page.rows[0].root.id, 2n, 'the reply belongs to its immediate parent')
+  assert.equal(page.rows.length, 1)
+  assert.equal(page.rows[0].root.id, 1n)
   assert.equal(page.rows[0].root.omitted, false)
-  assert.equal(page.rows[1].root.post?.id, 1n, 'the followed ancestor keeps its own row')
-  assert.deepEqual(ids(page.rows[0].cards.map((c) => c.post)), [3], 'the immediate parent is supplied separately as the root card')
-  assert.equal(page.rows[0].cards[0].gap, false, 'the row header names the immediate parent')
+  assert.deepEqual(ids(page.rows[0].cards.map(c => c.post)), [2, 3])
+  assert.deepEqual(page.rows[0].cards.map(c => c.gap), [false, false])
 })
 
 test('unselected ancestors do not bridge the immediate parent context', async () => {
@@ -361,7 +360,7 @@ test('a failed ancestor request keeps cached and independent context, and the ne
   mock.calls = []
   const filter = { kind: 'following', includeRepliesToViewer: false, authors: [followed] }
   const page = await counted(loadFeed(mock.chain, filter))
-  assert.equal(page.rows.length, 3, 'a context failure never rejects the feed')
+  assert.equal(page.rows.length, 2, 'a context failure never rejects the feed')
   assert.ok((ledger.message(mock.chain, 4n) !== undefined), 'the failed walk keeps what it already yielded')
   assert.ok((ledger.message(mock.chain, 7n) !== undefined), 'the independent walk still adds its context')
   assert.deepEqual(mock.calls.filter((c) => c.method === 'message' && c.url.includes('ancestors=')).map((c) => new URL(c.url, 'https://client.invalid').pathname.split('/').at(-1)).sort(), ['3', '7'])
@@ -372,7 +371,7 @@ test('a failed ancestor request keeps cached and independent context, and the ne
   const again = await counted(loadFeed(mock.chain, filter))
   assert.ok((ledger.message(mock.chain, 2n) !== undefined) && (ledger.message(mock.chain, 3n) !== undefined), 'the next refresh fills the missing context')
   assert.equal(mock.calls.filter((c) => c.method === 'message').length, 1, 'only the failed walk asks again')
-  assert.deepEqual(again.rows.map((r) => Number(r.root.id)).sort(), [4, 6, 7])
+  assert.deepEqual(again.rows.map((r) => Number(r.root.id)).sort(), [4, 6])
 })
 
 
@@ -807,7 +806,7 @@ for (const completed of [0, 1]) test(`paging failure after ${completed} pages ke
   } finally { globalThis.fetch = real }
 })
 
-for (const direct of [false, true]) test(`following ${direct ? 'groups a direct reply with its parent' : 'separates context from an older selected ancestor'}`, async () => {
+for (const direct of [false, true]) test(`following ${direct ? 'groups a direct reply with its parent' : 'joins visible context to an older selected ancestor'}`, async () => {
   const followed = address('99'), stranger = address('88')
   feedHistory([
     feedPost(345, 0, followed), feedPost(522, 0, followed),
@@ -816,10 +815,10 @@ for (const direct of [false, true]) test(`following ${direct ? 'groups a direct 
     feedPost(531, direct ? 345 : 529, followed, direct ? followed : stranger),
   ])
   const page = await counted(loadFeed(mock.chain, { kind: 'following', authors: [followed], includeRepliesToViewer: false }))
-  assert.deepEqual(page.rows.map(r => Number(r.root.id)), direct ? [345, 522] : [529, 522, 345])
+  assert.deepEqual(page.rows.map(r => Number(r.root.id)), [345, 522])
   assert.equal(page.rows[0].root.omitted, false)
-  assert.deepEqual(ids(page.rows[0].cards.map(c => c.post)), [530, 531])
-  assert.equal(page.rows[0].root.drawn, 2)
+  assert.deepEqual(ids(page.rows[0].cards.map(c => c.post)), direct ? [530, 531] : [529, 530, 531])
+  assert.equal(page.rows[0].root.drawn, direct ? 2 : 1)
 })
 
 for (const includeRepliesToViewer of [false, true]) for (const nested of [false, true]) test(`${includeRepliesToViewer ? 'Following' : 'Keyring'} keeps an unfollowed ${nested ? 'reply' : 'post'} as immediate context while signed out`, async () => {
@@ -832,12 +831,12 @@ for (const includeRepliesToViewer of [false, true]) for (const nested of [false,
   ])
   const page = await counted(loadFeed(mock.chain, { kind: 'following', authors: [followed], includeRepliesToViewer }))
   const row = page.rows[0]
-  assert.equal(row.root.id, 2n)
-  assert.equal(row.root.omitted, false, 'the selected reply supplies its immediate parent context')
-  assert.deepEqual(ids(row.cards.map(c => c.post)), [4], 'context does not bring in other replies')
-  assert.deepEqual(page.rows.map(r => r.root.id), [2n, 1n], 'context does not pull a distant ancestor into the conversation')
+  assert.equal(row.root.id, nested ? 1n : 2n)
+  assert.equal(row.root.omitted, false)
+  assert.deepEqual(ids(row.cards.map(c => c.post)), nested ? [2, 4] : [4], 'context does not bring in other replies')
+  assert.deepEqual(page.rows.map(r => r.root.id), nested ? [1n] : [2n, 1n])
   assert.equal(page.counts.get(2n), 2)
-  assert.equal(row.root.drawn, 1, 'the unselected sibling remains behind the reply count')
+  assert.equal(nested ? row.cards[0].drawn : row.root.drawn, 1, 'the unselected sibling remains behind the reply count')
 })
 
 test('profile replies retain older ancestors above the immediate parent', async () => {

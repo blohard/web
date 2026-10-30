@@ -8,7 +8,7 @@ import { SvelteMap } from 'svelte/reactivity'
 import * as api from '../../lib/api'
 import { endingOf, newestFirst, oldestFirst } from '../../lib/board'
 import { ancestorsOf, readMessage, rememberMessages } from '../../lib/messages'
-import { CONTEXT_DEPTH, groupProfileReplies, prepareRow, splitPreview, rowKey, type ConversationRowData } from './conversation'
+import { CONTEXT_DEPTH, groupProfileReplies, prepareRow, visibleConversations, rowKey, type ConversationRowData } from './conversation'
 import { gates as ledger } from '../../lib/gates.svelte'
 import { sameAddress } from '../../lib/format'
 import { appliesMutes, groupsSelectedOnly, curatedSubjects, feedQuery, selectPost, type Filter } from './feed-policy'
@@ -193,6 +193,8 @@ async function threadContext(
 
 /** The same prepared rows are counted during paging and passed to rendering. */
 type Selection = Pick<Page, 'rows'> & {
+  /** Preview history belongs to selection groups, independently of displayed rows. */
+  previews: Map<bigint, { after?: Posted; ids: ReadonlySet<bigint> }>
   /** Completed load's checkpoint; background polls never advance it. */
   at: api.At | null
   /** Replies after this block bypass automatic limits until the next refresh. */
@@ -231,29 +233,45 @@ async function select(f: Filter, v: View, chain: ChainInfo, preservePreviews = f
   const checkpoint = prior?.at?.checkpoint
   const newSince = (preservePreviews ? prior?.newSince : undefined)
     ?? (checkpoint ? BigInt(checkpoint.block) : undefined)
-  const previous = new Map<bigint, ConversationRowData[]>()
-  for (const row of prior?.rows.slice(0, v.limit) ?? []) {
-    const group = row.previewGroup ?? row.key
-    const parts = previous.get(group) ?? []
-    parts.push(row)
-    previous.set(group, parts)
-  }
-  const rows = posts.flatMap((p, i) => {
+  const shown = new Set((prior?.rows.slice(0, v.limit) ?? []).flatMap(row =>
+    [row.root.id, ...row.cards.map(card => card.post.id)]))
+  const owners = new Map((prior?.rows ?? []).flatMap(row =>
+    [row.root.id, ...row.cards.map(card => card.post.id)].map(id => [id, row.key] as const)))
+  const previews: Selection['previews'] = new Map()
+  let rows: ConversationRowData[] = posts.map((p, i) => {
     const group = rowKey(f, p)
-    const priorParts = previous.get(group) ?? []
-    const saved = preservePreviews ? priorParts : []
-    const owners = new Map(priorParts.flatMap(part => [part.root.id, ...part.cards.map(card => card.post.id)].map(id => [id, part.key] as const)))
-    const after = homeStream ? saved.length ? saved[0].previewAfter : activity.get(posts[i + 1]?.id) : undefined
+    const old = preservePreviews ? prior?.previews.get(group) : undefined
+    const saved = old && (shown.has(group) || [...old.ids].some(id => shown.has(id))) ? old : undefined
+    const after = homeStream ? saved ? saved.after : activity.get(posts[i + 1]?.id) : undefined
     const prepared = { ...prepareRow(f, p, source, {
       previewAfter: after,
       newSince: homeStream ? newSince : undefined,
-      keep: homeStream ? new Set(saved.flatMap(part => [...part.previewIds ?? []])) : undefined,
+      keep: saved && new Set([...saved.ids].filter(id => shown.has(id))),
       isOpen: id => homeStream && branchOpen(key, owners.get(id) ?? group, id),
     }), activity: activity.get(p.id) ?? p }
-    return homeStream ? splitPreview(prepared, ended, new Set(saved.map(part => part.root.id))) : [prepared]
+    previews.set(group, { after, ids: prepared.previewIds ?? new Set() })
+    return prepared
   })
-  if (homeStream) rows.sort((a, b) => newestFirst(a.activity ?? a.lead, b.activity ?? b.lead))
-  return { rows: profileReplies ? groupProfileReplies(rows, ended) : rows, at: v.at, newSince }
+  if (homeStream) {
+    // Local reloads keep existing row ownership. Explicit refresh can regroup,
+    // while a still-open root keeps its independent reply session.
+    const separate = new Set(preservePreviews ? prior?.rows.map(row => row.root.id) : [])
+    for (const row of rows) if ((owners.get(row.root.id) ?? row.key) === row.key && branchOpen(key, row.key, row.root.id)) {
+      separate.add(row.root.id)
+    }
+    const concealed = collapsedParents(key, prior?.rows ?? [])
+    const mutedIds = new Set(all.filter(p => appliesMutes(f) && muted.has(p.author)).map(p => p.id))
+    for (const row of rows) {
+      const parent = row.root.post?.parentId
+      const owner = owners.get(row.root.id)
+      const alreadyJoined = owner !== undefined && parent !== undefined && owner === owners.get(parent)
+      if (mutedIds.has(row.root.id) || (parent !== undefined && mutedIds.has(parent))
+        || (!alreadyJoined && (concealed.has(row.root.id) || (parent !== undefined && concealed.has(parent))))) separate.add(row.root.id)
+    }
+    rows = visibleConversations(rows, ended, separate)
+    rows.sort((a, b) => newestFirst(a.activity ?? a.lead, b.activity ?? b.lead))
+  }
+  return { rows: profileReplies ? groupProfileReplies(rows, ended) : rows, previews, at: v.at, newSince }
 }
 
 /** Keep every still-selected row previously displayed when new rows arrive above it. */

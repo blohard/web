@@ -215,18 +215,21 @@ ancestors.
 Every Home stream shows a displayed reply's immediate parent as context, regardless
 of whom the reader follows or whether a wallet is connected. Context does not
 select that parent's other replies or recursively add its ancestors. All Home
-streams group through selected records only; an unselected parent is the
-context root of a separate group, so its replies cannot promote a distant selected
-ancestor. Directly connected conversations still rank by their newest selected reply.
+streams choose preview cards and their immediate-parent context first, then build
+rows from those cards' reply connections in one pass. No missing or omitted card is
+added to connect a conversation. Preview cutoffs and allowances belong to selection
+groups, independently of the displayed rows. Local reloads retain existing row
+ownership, and a still-open context root keeps its own reply session.
 On load or refresh, all Home streams preview only replies newer than the
 next conversation's newest activity, keeping their immediate parent context.
 The last conversation has no age cutoff. Following, Keyring and Everyone retain their
 three-reply limit; Curated has no fixed reply limit. After folding, each connected
 part of the displayed cards becomes its own row, ranked by its newest displayed
 post. A selected ancestor separated by a hidden reply stays at its own position;
-context-only ancestors without displayed children disappear. Splitting adds no
-cards. Parts retain the original group's preview cutoff and allowance during paging
-and local reloads, while each part owns its expansion choices. Back restores the
+context-only ancestors without displayed children disappear. Muted and deleted
+parents do not connect separate selection groups. The selection retains each group's
+preview cutoff and chosen ids during paging and local reloads, while each displayed
+row owns its expansion choices. Back restores the
 same rows; an explicit refresh can regroup them using the current preview rules.
 Replies posted after the previous completed stream load's checkpoint bypass both
 limits on explicit Refresh. Background polls never advance this baseline. Local

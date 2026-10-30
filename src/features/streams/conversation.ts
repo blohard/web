@@ -142,8 +142,6 @@ export type ConversationRowData = {
   lead: Posted
   /** Chain position that ranks this conversation, including selected replies. */
   activity?: Posted
-  /** Parts split by preview folding share their original preview cutoff and allowance. */
-  previewGroup?: bigint
   /** Automatic-preview cutoff, retained during paging and Back. */
   previewAfter?: Posted
   /** Retained previews exclude cards added only as their parent context. */
@@ -205,35 +203,39 @@ export function prepareRow(filter: Filter, lead: Posted, source: RowSource, {
   }
 }
 
-/** Separate displayed branches at gaps left by folding, without adding any cards. */
-export function splitPreview(row: ConversationRowData, ended: ReadonlySet<bigint>, keptRoots: ReadonlySet<bigint> = new Set()): ConversationRowData[] {
-  const parts = new Map<bigint, { root: ConversationRowData['root']; posts: Posted[] }>()
-  const owners = new Map<bigint, bigint>([[row.root.id, row.root.id]])
-  parts.set(row.root.id, { root: row.root, posts: [] })
-  // Parents precede children in either oldest-first or branch order.
-  for (const { post } of row.cards) {
-    const owner = keptRoots.has(post.id) ? undefined : owners.get(post.parentId)
-    if (owner === undefined) {
-      parts.set(post.id, { root: { id: post.id, post, omitted: false, drawn: 0, joins: false }, posts: [] })
-      owners.set(post.id, post.id)
-    } else {
-      parts.get(owner)!.posts.push(post)
-      owners.set(post.id, owner)
-    }
+/** Build connected rows from the chosen cards. Missing cards are never filled in. */
+export function visibleConversations(previews: ConversationRowData[], ended: ReadonlySet<bigint>, separate: ReadonlySet<bigint>): ConversationRowData[] {
+  type Card = { post: Posted | undefined; source: ConversationRowData; root?: ConversationRowData['root'] }
+  const cards = new Map<bigint, Card>()
+  for (const source of previews) {
+    if (!cards.has(source.root.id)) cards.set(source.root.id, { post: source.root.post, source, root: source.root })
+    for (const { post } of source.cards) cards.set(post.id, { post, source })
   }
-  return [...parts.values()].filter(part => !part.root.omitted || part.posts.length > 0).map(({ root, posts }) => {
-    const visible = [...(root.post ? [root.post] : []), ...posts]
-    const activity = visible.reduce((a, b) => newestFirst(a, b) <= 0 ? a : b, root.post ?? row.lead)
-    if (parts.size === 1) return { ...row, activity }
-    const lead = posts.filter(p => p.parentId === root.id).sort(newestFirst)[0] ?? root.post ?? row.lead
-    const ids = new Set(visible.map(p => p.id))
-    return {
-      ...row, key: root.id, lead, activity, previewGroup: row.previewGroup ?? row.key,
-      previewIds: new Set([...row.previewIds ?? []].filter(id => ids.has(id))),
-      root: { ...root, drawn: posts.filter(p => p.parentId === root.id && !ended.has(p.id)).length,
-        joins: !root.omitted && posts[0]?.parentId === root.id },
-      cards: conversationCards(root.id, posts, ended),
-    }
+  const owners = new Map<bigint, bigint>()
+  const groups = new Map<bigint, Posted[]>()
+  // Post ids increase along every reply edge, so a parent's owner is known first.
+  for (const [id, card] of [...cards].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
+    const parent = card.post && cards.get(card.post.parentId)
+    const samePreview = parent?.source === card.source
+    const connected = parent && !card.root?.omitted && !separate.has(id) && (!parent.root?.omitted || samePreview)
+      && (samePreview || (!ended.has(id) && !ended.has(card.post!.parentId)))
+    const owner = connected ? owners.get(card.post!.parentId)! : id
+    owners.set(id, owner)
+    if (owner === id) groups.set(id, [])
+    else if (card.post) groups.get(owner)!.push(card.post)
+  }
+  return [...groups].flatMap(([id, posts]) => {
+    const { post, source, root = { id, post, omitted: false, drawn: 0, joins: false } } = cards.get(id)!
+    if (root.omitted && !posts.length) return []
+    const ordered = source.depthFirst ? branchOrder(posts) : posts.sort(oldestFirst)
+    const lead = id === source.root.id ? source.lead
+      : posts.filter(p => p.parentId === id).sort(newestFirst)[0] ?? post ?? source.lead
+    const activity = [post, ...posts].filter((p): p is Posted => !!p).sort(newestFirst)[0] ?? lead
+    return [{ kind: 'pair' as const, depthFirst: source.depthFirst, key: id, lead, activity,
+      root: { ...root, drawn: posts.filter(p => p.parentId === id && !ended.has(p.id)).length,
+        joins: !root.omitted && ordered[0]?.parentId === id },
+      cards: conversationCards(id, ordered, ended),
+    }]
   })
 }
 

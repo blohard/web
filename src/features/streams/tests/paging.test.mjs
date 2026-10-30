@@ -3,7 +3,7 @@ import { after, beforeEach, test } from 'node:test'
 import { load, mock, install, teardown, author, address, feedPost, feedHistory, counted, ids, curate, gateChanged } from '../../../../scripts/host-harness.mjs'
 
 const { loadFeed, olderFeed, resumeFeed, peekFeed, feedKey, FEED_PAGE_SIZE } = await load('features/streams/feed.ts')
-const { prepareRow, drawnReplies, gapsIn, rowKey, withInlined } = await load('features/streams/conversation.ts')
+const { prepareRow, visibleConversations, drawnReplies, gapsIn, rowKey, withInlined } = await load('features/streams/conversation.ts')
 const { RowExpansion, expansionOf } = await load('features/streams/stream-expansion.ts')
 beforeEach(install)
 after(teardown)
@@ -240,15 +240,64 @@ test('muting the only selected reply leaves no empty context row', async () => {
   finally { muted.toggle(author) }
 })
 
+for (const stream of ['curated', 'following']) test(`${stream} joins an alternating conversation through its displayed parent context`, async () => {
+  curate([author])
+  const outsider = address('88')
+  const filter = stream === 'curated' ? { kind: 'timeline', curatedOnly: true }
+    : { kind: 'following', authors: [author], includeRepliesToViewer: false }
+  feedHistory([feedPost(2443, 0, outsider), feedPost(2445, 2443),
+    feedPost(2448, 2445, outsider), feedPost(2450, 2448)])
+  for (const read of [loadFeed, loadFeed, resumeFeed, olderFeed, (chain, f) => loadFeed(chain, f, { preservePreviews: true })]) {
+    const page = await counted(read(mock.chain, filter))
+    assert.deepEqual(page.rows.map(r => [r.root.id, ...r.cards.map(c => c.post.id)]), [[2443n, 2445n, 2448n, 2450n]])
+    assert.deepEqual([page.rows[0].root.drawn, ...page.rows[0].cards.map(c => c.drawn)], [1, 1, 1, 0])
+    assert.deepEqual(page.rows[0].cards.map(c => c.gap), [false, false, false])
+  }
+  assert.ok(!mock.calls.some(c => c.method === 'replies'), 'joining visible context never opens a reply list')
+})
+
+test('row construction never reveals an omitted root to connect visible cards', () => {
+  const posts = [feedPost(1), feedPost(2, 1), feedPost(3, 2), feedPost(4, 3)]
+  const filter = { kind: 'timeline', curatedOnly: true }
+  const source = { ...withInlined([], posts.slice(2)), parents: new Map(posts.map(p => [p.id, p])),
+    ended: new Set(), selected: new Set([1n, 3n, 4n]) }
+  const previews = [prepareRow(filter, posts[0], source),
+    prepareRow(filter, posts[2], source, { previewAfter: posts[2] })]
+  assert.equal(previews[1].root.omitted, true)
+  const rows = visibleConversations(previews, new Set(), new Set())
+  assert.deepEqual(rows.flatMap(row => [...(row.root.omitted ? [] : [row.root.id]), ...row.cards.map(c => c.post.id)]), [1n, 3n, 4n])
+})
+
+test('joined rows retain each preview cutoff and nested expansion across a local reload', async () => {
+  curate([author])
+  const other = address('88'), filter = { kind: 'timeline', curatedOnly: true }
+  const history = [feedPost(1, 0, other), feedPost(2, 1), feedPost(3, 2, other), feedPost(4, 3)]
+  feedHistory(history)
+  const first = await loadFeed(mock.chain, filter)
+  const expansion = new RowExpansion(expansionOf(feedKey(mock.chain, filter)), 1n)
+  expansion.press(3n)
+  expansion.views().set(3n, { limit: 40, open: { '4': true }, retained: [4n] })
+  feedHistory([...history, feedPost(5)])
+  const local = await loadFeed(mock.chain, filter, { preservePreviews: true })
+  const row = local.rows.find(r => r.root.id === 1n)
+  assert.deepEqual(row.cards, first.rows[0].cards)
+  assert.equal(expansion.isOpen(3n), true)
+  assert.deepEqual(expansion.views().get(3n), { limit: 40, open: { '4': true }, retained: [4n] })
+  expansion.hide(2n)
+  const hidden = await loadFeed(mock.chain, filter, { preservePreviews: true })
+  assert.deepEqual(hidden.rows.map(r => r.key), local.rows.map(r => r.key), 'hiding a joined branch cannot give it a new row on reload')
+  assert.deepEqual(ids(expansion.preview(hidden.rows.find(r => r.key === 1n).cards.map(c => c.post))), [2])
+})
+
 test('curated shows every loaded qualifying reply, including earlier replies in a conversation', async () => {
   curate([author])
   const outsider = address('88')
   feedHistory([feedPost(23), feedPost(26, 23, outsider), feedPost(43, 23), feedPost(45, 26),
     feedPost(46, 45, outsider), feedPost(48, 46), feedPost(50, 43), feedPost(51, 23), feedPost(52, 23, outsider)])
   const page = await loadFeed(mock.chain, { kind: 'timeline', curatedOnly: true })
-  assert.deepEqual(page.rows.map(row => row.root.id), [23n, 46n, 26n])
-  assert.deepEqual(page.rows.map(row => ids(row.cards.map(c => c.post))), [[43, 50, 51], [48], [45]],
-    'all curated replies remain in their selected branches, with immediate parent context')
+  assert.deepEqual(page.rows.map(row => row.root.id), [23n])
+  assert.deepEqual(page.rows.map(row => ids(row.cards.map(c => c.post))), [[26, 45, 46, 48, 43, 50, 51]],
+    'all selected replies and their immediate context connect in branch order')
   assert.ok(!mock.calls.some(c => c.method === 'replies'), 'showing selected replies never expands a reply page')
 })
 
@@ -499,21 +548,21 @@ for (const includeRepliesToViewer of [false, true]) test(`${includeRepliesToView
 })
 
 
-for (const curatedOnly of [false, true]) test(`${curatedOnly ? 'Curated' : 'Everyone'} keeps an opened context branch separate from a newer sibling branch`, async () => {
+for (const curatedOnly of [false, true]) test(`${curatedOnly ? 'Curated' : 'Everyone'} keeps an opened context branch in its existing row across refresh`, async () => {
   curate([author])
   const other = address('88'), filter = { kind: 'timeline', curatedOnly, viewer: author }
   const history = [feedPost(1, 0, other), feedPost(2, 1, other), feedPost(3, 2)]
   feedHistory(history)
   const initial = await loadFeed(mock.chain, filter)
-  assert.equal(initial.rows[0].root.id, 2n)
-  assert.deepEqual(ids(initial.rows[0].cards.map(c => c.post)), [3])
-  const expansion = new RowExpansion(expansionOf(feedKey(mock.chain, filter)), 2n)
+  assert.equal(initial.rows[0].root.id, curatedOnly ? 2n : 1n)
+  assert.deepEqual(ids(initial.rows[0].cards.map(c => c.post)), curatedOnly ? [3] : [2, 3])
+  const expansion = new RowExpansion(expansionOf(feedKey(mock.chain, filter)), initial.rows[0].key)
   expansion.press(2n)
   feedHistory([...history, feedPost(4), feedPost(5, 1)])
   const refreshed = await loadFeed(mock.chain, filter)
-  assert.deepEqual(refreshed.rows.map(row => row.root.id), [1n, 4n, 2n])
-  assert.deepEqual(ids(refreshed.rows[0].cards.map(c => c.post)), [5])
-  assert.deepEqual(ids(refreshed.rows[2].cards.map(c => c.post)), [3])
+  assert.deepEqual(refreshed.rows.map(row => row.root.id), curatedOnly ? [1n, 4n, 2n] : [1n, 4n])
+  assert.deepEqual(ids(refreshed.rows[0].cards.map(c => c.post)), curatedOnly ? [5] : [2, 3, 5])
+  if (curatedOnly) assert.deepEqual(ids(refreshed.rows[2].cards.map(c => c.post)), [3])
   assert.equal(expansion.isOpen(2n), true, 'the older branch retains its own expansion choice')
 })
 
