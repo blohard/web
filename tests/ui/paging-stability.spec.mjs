@@ -49,3 +49,45 @@ for (const width of [1100, 390]) test(`paging appends older conversations withou
   await settle(page)
   expect(await geometry(page)).toEqual(after)
 })
+
+for (const width of [1100, 390]) test(`profile Replies paging appends older siblings as one conversation at ${width}px`, async ({ page, host }) => {
+  await page.setViewportSize({ width, height: 900 })
+  host.post(1, 'Shared parent body shown once.', { who: stranger })
+  for (const id of [2, 3, 4]) host.post(id, `Older sibling ${id}.`, { parent: 1 })
+  // Nineteen other conversations fill the first page beside the newest
+  // sibling. Only paging reaches the three older replies to the same parent.
+  for (let id = 10; id <= 46; id += 2) {
+    host.post(id, `Other parent ${id}.`, { who: stranger })
+    host.post(id + 1, `Other reply ${id + 1}.`, { parent: id })
+  }
+  host.post(50, 'Newest sibling.', { parent: 1 })
+  await page.goto(`/u/84532/${author}/replies`)
+  const rows = page.locator('[data-feed-row]')
+  await expect(rows).toHaveCount(20)
+  await expect(card(page, 50)).toBeVisible()
+  for (const id of [2, 3, 4]) await expect(card(page, id)).toHaveCount(0)
+  await settle(page)
+  const before = await geometry(page)
+  const nodes = await cards(page).elementHandles()
+
+  await page.getByRole('button', { name: '[ show more posts ]', exact: true }).click()
+  await expect(page.getByText("you've reached the end of this stream", { exact: true })).toBeVisible()
+  await expect(rows).toHaveCount(21)
+  await expect(rows.last().locator('article.msg a[aria-label^="open post #"]')).toHaveText(['#2', '#3', '#4'])
+  await expect(page.getByText('Shared parent body shown once.', { exact: true })).toHaveCount(1)
+  await settle(page)
+  const after = await geometry(page)
+  expect(after.slice(0, before.length)).toEqual(before)
+  for (const node of nodes) expect(await node.evaluate(el => el.isConnected)).toBe(true)
+  expect(after.length).toBe(before.length + 3)
+  expect(new Set(after.map(row => row.id)).size).toBe(after.length)
+
+  await card(page, 3).getByRole('link', { name: 'open post #3', exact: true }).click()
+  await expect(page).toHaveURL(/\/p\/84532\/3$/)
+  await page.goBack()
+  await expect(rows).toHaveCount(21)
+  await expect(rows.last().locator('article.msg a[aria-label^="open post #"]')).toHaveText(['#2', '#3', '#4'])
+  await expect(page.getByText('Shared parent body shown once.', { exact: true })).toHaveCount(1)
+  await settle(page)
+  expect(await geometry(page)).toEqual(after)
+})

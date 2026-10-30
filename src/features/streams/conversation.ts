@@ -243,7 +243,7 @@ export function visibleConversations(previews: ConversationRowData[], ended: Rea
 export function appendConversations(before: ConversationRowData[], rows: ConversationRowData[], ended: ReadonlySet<bigint>): ConversationRowData[] {
   if (!before.length) return rows
   const known = new Set(before.flatMap(row => [row.root.id, ...row.cards.map(card => card.post.id)]))
-  const added = rows.flatMap(row => known.has(row.root.id) || row.cards.some(card => known.has(card.post.id))
+  const added = rows.flatMap(row => known.has(row.key) || row.cards.some(card => known.has(card.post.id))
     ? visibleConversations([row], ended, new Set(), known) : [row])
   added.sort((a, b) => newestFirst(a.activity ?? a.lead, b.activity ?? b.lead))
   return [...before, ...added]
@@ -280,31 +280,32 @@ export function conversationCards(parent: bigint, posts: Posted[], ended: Readon
 }
 
 
-/** Combine overlapping profile context using only the cards already selected for display. */
-export function groupProfileReplies(rows: ConversationRowData[], ended: ReadonlySet<bigint>): ConversationRowData[] {
+/** Group selected profile replies. Excluded cards stay in earlier displayed rows. */
+export function groupProfileReplies(rows: ConversationRowData[], ended: ReadonlySet<bigint>, exclude: ReadonlySet<bigint> = new Set()): ConversationRowData[] {
   const subjects = new Set(rows.map(row => row.lead.id))
   const missingRoots = new Set(rows.filter(row => !row.root.post).map(row => row.root.id))
   const records = new Map<bigint, Posted>()
   for (const row of rows) {
-    if (row.root.post) records.set(row.root.id, row.root.post)
-    for (const card of row.cards) records.set(card.post.id, card.post)
+    if (row.root.post && !exclude.has(row.root.id)) records.set(row.root.id, row.root.post)
+    for (const card of row.cards) if (!exclude.has(card.post.id)) records.set(card.post.id, card.post)
   }
   const posts = [...records.values()]
   const grouped = withInlined(posts.filter(p => p.parentId === 0n), posts.filter(p => p.parentId !== 0n))
-  return grouped.posts.map(post => {
+  return grouped.posts.flatMap(post => {
     let id = post.parentId || post.id
     const cards = branchOrder(conversationReplies(grouped, post))
-    // A bounded context path may stop before the actual root. Keep its first
-    // loaded card as the root instead of requesting an extra ancestor.
-    const root = records.get(id) ?? (missingRoots.has(id) ? undefined : cards.shift())
+    // An already displayed parent stays a link. Otherwise a bounded context
+    // path keeps its first loaded card instead of requesting an extra ancestor.
+    const root = records.get(id) ?? (missingRoots.has(id) || exclude.has(id) ? undefined : cards.shift())
     if (root) id = root.id
     // Context cannot rank a conversation or become its subject. Use the newest
     // profile reply, even when an answer from the reader is newer still.
-    const lead = [root, ...cards].filter((p): p is Posted => !!p && subjects.has(p.id)).sort(newestFirst)[0]!
-    return {
+    const lead = [root, ...cards].filter((p): p is Posted => !!p && subjects.has(p.id)).sort(newestFirst)[0]
+    if (!lead) return []
+    return [{
       kind: 'pair' as const, depthFirst: true, key: lead.id, lead,
-      root: { id, post: root, omitted: false, drawn: cards.filter(p => p.parentId === id && !ended.has(p.id)).length, joins: cards[0]?.parentId === id },
+      root: { id, post: root, omitted: exclude.has(id), drawn: cards.filter(p => p.parentId === id && !ended.has(p.id)).length, joins: !exclude.has(id) && cards[0]?.parentId === id },
       cards: conversationCards(id, cards, ended),
-    }
+    }]
   }).sort((a, b) => newestFirst(a.lead, b.lead))
 }

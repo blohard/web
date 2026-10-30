@@ -3,7 +3,7 @@ import { after, beforeEach, test } from 'node:test'
 import { load, mock, install, teardown, author, address, feedPost, feedHistory, counted, ids, curate, gateChanged } from '../../../../scripts/host-harness.mjs'
 
 const { loadFeed, olderFeed, resumeFeed, peekFeed, feedKey, FEED_PAGE_SIZE } = await load('features/streams/feed.ts')
-const { prepareRow, visibleConversations, drawnReplies, gapsIn, rowKey, withInlined } = await load('features/streams/conversation.ts')
+const { prepareRow, visibleConversations, groupProfileReplies, drawnReplies, gapsIn, rowKey, withInlined } = await load('features/streams/conversation.ts')
 const { RowExpansion, expansionOf } = await load('features/streams/stream-expansion.ts')
 beforeEach(install)
 after(teardown)
@@ -266,6 +266,19 @@ test('row construction never reveals an omitted root to connect visible cards', 
   assert.equal(previews[1].root.omitted, true)
   const rows = visibleConversations(previews, new Set(), new Set())
   assert.deepEqual(rows.flatMap(row => [...(row.root.omitted ? [] : [row.root.id]), ...row.cards.map(c => c.post.id)]), [1n, 3n, 4n])
+})
+
+test('new profile context cannot append a row for an already displayed reply', () => {
+  const stranger = address('88'), filter = { kind: 'author-replies', address: author }
+  const ancestor = feedPost(1, 0, stranger), parent = feedPost(2, 1, stranger), reply = feedPost(3, 2, author, stranger)
+  const source = { parents: new Map([[parent.id, parent]]), chains: new Map(), groups: new Map(), ended: new Set() }
+  const before = prepareRow(filter, reply, source)
+  assert.equal(before.root.id, 2n)
+  const displayed = new Set([before.root.id, ...before.cards.map(card => card.post.id)])
+  source.parents.set(ancestor.id, ancestor)
+  const after = prepareRow(filter, reply, source)
+  assert.equal(after.root.id, 1n, 'the next context read discovers an older ancestor')
+  assert.deepEqual(groupProfileReplies([after], source.ended, displayed), [], 'context alone cannot become an appended conversation')
 })
 
 test('joined rows retain each preview cutoff and nested expansion across a local reload', async () => {

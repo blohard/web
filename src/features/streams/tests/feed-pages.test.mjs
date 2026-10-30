@@ -181,6 +181,10 @@ test('profile reply paging appends older siblings without changing the displayed
   assert.equal(first.complete, false)
   const next = await olderFeed(mock.chain, filter, 2)
   assert.equal(next.rows[0], first.rows[0], 'paging keeps the displayed row itself')
+  assert.equal(next.rows.length, 2, 'older siblings form one appended conversation')
+  assert.equal(next.rows[1].root.id, 1n)
+  assert.equal(next.rows[1].root.omitted, true, 'the shared parent body is not repeated')
+  assert.deepEqual(ids(next.rows[1].cards.map(card => card.post)), ids(replies.slice(0, 15)))
   const all = await olderFeed(mock.chain, filter, 40)
   const displayed = all.rows.flatMap(row => [...(row.root.omitted ? [] : [row.root.id]), ...row.cards.map(card => card.post.id)])
   assert.deepEqual(displayed.slice(0, 21), [1n, ...replies.slice(15).map(post => post.id)])
@@ -190,4 +194,33 @@ test('profile reply paging appends older siblings without changing the displayed
   const refreshed = await loadFeed(mock.chain, filter, { limit: 40 })
   assert.equal(refreshed.rows.length, 1, 'explicit refresh can combine the conversation')
   assert.deepEqual(ids(refreshed.rows[0].cards.map(card => card.post)), ids(replies))
+})
+
+
+test('successive profile reply pages keep nested siblings together and prior conversations fixed', async () => {
+  const stranger = address('44')
+  const replies = Array.from({ length: 55 }, (_, i) => feedPost(100 + i, 2, author, stranger))
+  feedHistory([feedPost(1, 0, stranger), feedPost(2, 1, stranger), ...replies])
+  const filter = { kind: 'author-replies', address: author }
+  let page = await loadFeed(mock.chain, filter, { limit: 1 })
+  assert.equal(page.rows.length, 1)
+  assert.equal(page.rows[0].root.id, 1n)
+  for (const limit of [2, 3]) {
+    const before = page
+    page = await olderFeed(mock.chain, filter, limit)
+    assert.equal(page.rows.length, limit, 'each page appends one continuation')
+    for (const [i, row] of before.rows.entries()) assert.equal(page.rows[i], row)
+    const continuation = page.rows.at(-1)
+    assert.equal(continuation.root.id, 2n, 'the continuation names its immediate parent')
+    assert.equal(continuation.root.omitted, true)
+    assert.equal(continuation.key, continuation.lead.id)
+    assert.ok(continuation.cards.every(card => card.post.parentId === 2n))
+    assert.equal(new Set(page.rows.map(row => row.key)).size, page.rows.length)
+    const returned = await resumeFeed(mock.chain, filter, limit)
+    assert.deepEqual(returned.rows, page.rows)
+    page = returned
+  }
+  assert.equal(page.complete, true)
+  const displayed = page.rows.flatMap(row => [...(row.root.omitted ? [] : [row.root.id]), ...row.cards.map(card => card.post.id)])
+  assert.deepEqual([...displayed].sort((a, b) => Number(a - b)), [1n, 2n, ...replies.map(post => post.id)])
 })

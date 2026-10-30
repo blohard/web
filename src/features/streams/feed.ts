@@ -271,7 +271,8 @@ async function select(f: Filter, v: View, chain: ChainInfo, preservePreviews = f
     rows = visibleConversations(rows, ended, separate)
     rows.sort((a, b) => newestFirst(a.activity ?? a.lead, b.activity ?? b.lead))
   }
-  if (profileReplies) rows = groupProfileReplies(rows, ended)
+  if (profileReplies) rows = groupProfileReplies(rows, ended,
+    new Set(fixed.flatMap(row => [row.root.id, ...row.cards.map(card => card.post.id)])))
   rows = resume
     ? retainedConversations(fixed, rows, ended, new Set([...v.held.keys()].filter(id => eligibleIds.has(id))))
     : appendConversations(fixed, rows, ended)

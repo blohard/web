@@ -214,8 +214,9 @@ existing context and folding rules. Overlapping profile reply paths share one
 conversation, with each loaded card shown once in branch order. Conversations are
 ranked by their newest profile reply; context and the reader’s answers do not
 promote them. Grouping uses only the already-selected cards and reads no extra
-ancestors. Paging preserves the displayed conversation and appends older replies
-below it without repeating its context. A refresh may combine those rows again.
+ancestors. Paging preserves displayed conversations and groups newly loaded replies
+into appended conversations, keeping siblings together. An already displayed parent
+is named by a context link rather than repeated. A refresh may combine those rows again.
 
 Every Home stream shows a displayed reply's immediate parent as context, regardless
 of whom the reader follows or whether a wallet is connected. Context does not
