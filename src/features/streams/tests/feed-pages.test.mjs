@@ -170,7 +170,7 @@ test('paging across a policy edit keeps the page in place until refresh', async 
 })
 
 
-test('profile reply paging adds older siblings without repeating their shared context', async () => {
+test('profile reply paging appends older siblings without changing the displayed conversation', async () => {
   const stranger = address('44')
   const replies = Array.from({ length: 35 }, (_, i) => feedPost(100 + i, 1, author, stranger))
   feedHistory([feedPost(1, 0, stranger), ...replies])
@@ -180,9 +180,14 @@ test('profile reply paging adds older siblings without repeating their shared co
   assert.equal(first.rows[0].cards.length, 20)
   assert.equal(first.complete, false)
   const next = await olderFeed(mock.chain, filter, 2)
-  assert.equal(next.rows.length, 1)
-  assert.equal(next.rows[0].key, first.rows[0].key)
-  assert.equal(next.rows[0].root.id, 1n)
-  assert.deepEqual(ids(next.rows[0].cards.map(card => card.post)), ids(replies))
-  assert.equal(next.complete, true)
+  assert.equal(next.rows[0], first.rows[0], 'paging keeps the displayed row itself')
+  const all = await olderFeed(mock.chain, filter, 40)
+  const displayed = all.rows.flatMap(row => [...(row.root.omitted ? [] : [row.root.id]), ...row.cards.map(card => card.post.id)])
+  assert.deepEqual(displayed.slice(0, 21), [1n, ...replies.slice(15).map(post => post.id)])
+  assert.deepEqual([...displayed].sort((a, b) => Number(a - b)), [1n, ...replies.map(post => post.id)])
+  assert.equal(all.complete, true)
+  assert.deepEqual((await resumeFeed(mock.chain, filter, 40)).rows, all.rows, 'Back preserves the appended rows')
+  const refreshed = await loadFeed(mock.chain, filter, { limit: 40 })
+  assert.equal(refreshed.rows.length, 1, 'explicit refresh can combine the conversation')
+  assert.deepEqual(ids(refreshed.rows[0].cards.map(card => card.post)), ids(replies))
 })

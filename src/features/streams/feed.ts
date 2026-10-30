@@ -8,7 +8,7 @@ import { SvelteMap } from 'svelte/reactivity'
 import * as api from '../../lib/api'
 import { endingOf, newestFirst, oldestFirst } from '../../lib/board'
 import { ancestorsOf, readMessage, rememberMessages } from '../../lib/messages'
-import { CONTEXT_DEPTH, groupProfileReplies, prepareRow, visibleConversations, rowKey, type ConversationRowData } from './conversation'
+import { CONTEXT_DEPTH, groupProfileReplies, prepareRow, visibleConversations, appendConversations, retainedConversations, rowKey, type ConversationRowData } from './conversation'
 import { gates as ledger } from '../../lib/gates.svelte'
 import { sameAddress } from '../../lib/format'
 import { appliesMutes, groupsSelectedOnly, curatedSubjects, feedQuery, selectPost, type Filter } from './feed-policy'
@@ -75,9 +75,9 @@ function takeRecords(v: View, chain: ChainInfo, at: api.At, records: api.WireRec
 }
 
 /** Each completed page advances its cursor, even if personal filters hide every row. */
-async function older(f: Filter, v: View, chain: ChainInfo, limit: number, preservePreviews = false): Promise<Selection> {
+async function older(f: Filter, v: View, chain: ChainInfo, limit: number, preservePreviews = false, fixed: ConversationRowData[] = []): Promise<Selection> {
   v.unfinished = true
-  let selected = await select(f, v, chain, preservePreviews)
+  let selected = await select(f, v, chain, preservePreviews, fixed)
   for (let round = 0; round < ROUNDS && !v.complete && selected.rows.length < limit; round++) {
     const page = await api.feed(chain, feedQuery(f, chain), v.cursor, Math.min(50, Math.max(20, limit - selected.rows.length)))
     if (page.items.length > 50 || (v.at && page.at.generation !== v.at.generation)) throw new api.ApiError(409, 'reset_required')
@@ -92,7 +92,7 @@ async function older(f: Filter, v: View, chain: ChainInfo, limit: number, preser
       v.reach = new Date(oldest.timestamp * 1000)
       v.scannedThrough = { block: oldest.blockNumber, log: oldest.logIndex }
     }
-    selected = await select(f, v, chain, preservePreviews)
+    selected = await select(f, v, chain, preservePreviews, fixed)
   }
   v.unfinished = false
   return selected
@@ -209,7 +209,7 @@ type Selection = Pick<Page, 'rows'> & {
  * reads already populated the shared gate ledger, including local receipt
  * overlays. Selection needs no further gate reads.
  */
-async function select(f: Filter, v: View, chain: ChainInfo, preservePreviews = false): Promise<Selection> {
+async function select(f: Filter, v: View, chain: ChainInfo, preservePreviews = false, fixed: ConversationRowData[] = [], resume = false): Promise<Selection> {
   const byId = new Map(v.held)
   const profileReplies = f.kind === 'author-replies'
   const context = await threadContext(chain, byId, profileReplies ? v.replies : v.inlined, profileReplies)
@@ -246,7 +246,7 @@ async function select(f: Filter, v: View, chain: ChainInfo, preservePreviews = f
     const prepared = { ...prepareRow(f, p, source, {
       previewAfter: after,
       newSince: homeStream ? newSince : undefined,
-      keep: saved && new Set([...saved.ids].filter(id => shown.has(id))),
+      keep: homeStream && saved ? new Set([...saved.ids].filter(id => shown.has(id))) : undefined,
       isOpen: id => homeStream && branchOpen(key, owners.get(id) ?? group, id),
     }), activity: activity.get(p.id) ?? p }
     previews.set(group, { after, ids: prepared.previewIds ?? new Set() })
@@ -271,7 +271,11 @@ async function select(f: Filter, v: View, chain: ChainInfo, preservePreviews = f
     rows = visibleConversations(rows, ended, separate)
     rows.sort((a, b) => newestFirst(a.activity ?? a.lead, b.activity ?? b.lead))
   }
-  return { rows: profileReplies ? groupProfileReplies(rows, ended) : rows, previews, at: v.at, newSince }
+  if (profileReplies) rows = groupProfileReplies(rows, ended)
+  rows = resume
+    ? retainedConversations(fixed, rows, ended, new Set([...v.held.keys()].filter(id => eligibleIds.has(id))))
+    : appendConversations(fixed, rows, ended)
+  return { rows, previews, at: v.at, newSince }
 }
 
 /** Keep every still-selected row previously displayed when new rows arrive above it. */
@@ -334,13 +338,15 @@ export async function acceptPublication(chain: ChainInfo, id: bigint, parentId: 
   const parent = ancestors[0]
   await Promise.all([cue, ...targets.map(([key, v]) => v.queue.run(async () => {
     if (key === mounted?.key || v.at?.generation !== at.generation) return
-    if (!v.seen.has(id) && eligible(v.filter, v, chain, record)) {
+    const selected = !v.seen.has(id) && eligible(v.filter, v, chain, record)
+    if (selected) {
       merge(v.filter, v, [record])
       v.counts.set(id, record.replies)
       v.quiet.forget(id)
     }
     if (parent && v.counts.has(parent.id)) v.counts.set(parent.id, parent.replies)
     await acceptStreamReply(chain, key, at, record, parent)
+    if (selected) await present(v.filter, v, chain, v.limit, true, await select(v.filter, v, chain, true))
   }))])
 }
 
@@ -426,7 +432,7 @@ async function look(chain: ChainInfo, filter: Filter, want: 'newer' | 'older' | 
     }
     else if (want === 'newer' && policyChanged(view)) selected = await afresh(filter, view, chain, shown, preservePreviews)
     else if (want === 'older') {
-      try { selected = await older(filter, view, chain, shown, true) }
+      try { selected = await older(filter, view, chain, shown, true, view.selection?.rows.slice(0, view.limit)) }
       catch (error) {
         // A policy edit invalidates cursors before this tab necessarily hears
         // about it. Learn the revision, but leave replacing rows to refresh.
@@ -444,7 +450,10 @@ async function look(chain: ChainInfo, filter: Filter, want: 'newer' | 'older' | 
         selected = await afresh(filter, view, chain, shown, preservePreviews)
       }
     }
-    if (!selected) selected = await select(filter, view, chain, preservePreviews)
+    if (!selected) {
+      const resume = want === 'resume' && preservePreviews
+      selected = await select(filter, view, chain, preservePreviews, resume ? view.selection?.rows.slice(0, view.limit) : [], resume)
+    }
     const page = await present(filter, view, chain, shown, preserveVisibleRows, selected)
     if (key === mounted?.key) mounted.cue(feedCue(chain, filter))
     return page

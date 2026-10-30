@@ -5,7 +5,7 @@ const production = process.env.BLOHARD_UI_BUILD === 'production'
 export default defineConfig({
   testDir: './tests/ui',
   fullyParallel: true,
-  ...(production ? { testMatch: 'layout.spec.mjs' } : {}),
+  ...(production ? { testMatch: ['layout.spec.mjs', 'paging-stability.spec.mjs'] } : {}),
   forbidOnly: !!process.env.CI,
   retries: 0,
   use: { baseURL: 'http://127.0.0.1:8790', trace: 'retain-on-failure' },

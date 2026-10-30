@@ -191,7 +191,11 @@ refreshes keep the verdicts already shown.
 `loadFeed` reads current changes. Its `preserveVisibleRows` option defaults to
 true: newer rows extend the limit rather than pushing an existing row out of
 view. A first visit passes false. `resumeFeed` reuses the retained snapshot and
-the visit's saved limit; `olderFeed` extends the displayed range. These choices
+the visit's saved limit. `olderFeed` keeps displayed rows unchanged and appends
+older cards below them, including when those cards belong to a conversation
+already shown. Back preserves those row boundaries while applying current filters
+and endings. Explicit Refresh may combine the conversations again. Everyone keeps
+its displayed key events in place too. These choices
 are independent of the refresh cue, which only reports waiting changes.
 A resumed snapshot restores its pending cue; a fresh load starts with no cue.
 
@@ -210,7 +214,8 @@ existing context and folding rules. Overlapping profile reply paths share one
 conversation, with each loaded card shown once in branch order. Conversations are
 ranked by their newest profile reply; context and the reader’s answers do not
 promote them. Grouping uses only the already-selected cards and reads no extra
-ancestors.
+ancestors. Paging preserves the displayed conversation and appends older replies
+below it without repeating its context. A refresh may combine those rows again.
 
 Every Home stream shows a displayed reply's immediate parent as context, regardless
 of whom the reader follows or whether a wallet is connected. Context does not

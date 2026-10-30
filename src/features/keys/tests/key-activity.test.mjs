@@ -95,6 +95,93 @@ test('Everyone merges by block and log, keeps conversation order, and preserves 
   assert.deepEqual(second.entries.slice(0, second.limit).map(e => e.key), ['key/100/5', 'key/100/4', '2', 'key/100/2'])
 })
 
+test('Everyone paging appends discoveries without moving or rebuilding displayed entries, and Back keeps their order', async () => {
+  globalThis.fetch = async () => Response.json(answer([purchase(90), purchase(50), purchase(20)]))
+  const post = log => ({ key: BigInt(log), lead: { blockNumber: 100n, logIndex: log } })
+  const original = post(80)
+  const activity = new EveryoneActivity(mock.chain, market)
+  const first = await activity.load(Promise.resolve({ rows: [original, post(40)], limit: 3, complete: true }), true, false)
+  assert.deepEqual(first.entries.slice(0, first.limit).map(e => e.key), ['key/100/90', '80', 'key/100/50'])
+
+  const updated = { ...original, cards: [{ post: { id: 81n } }] }
+  const page = { rows: [updated, post(40), post(70), post(10)], limit: 6, complete: true }
+  const older = await activity.load(Promise.resolve(page), false, true, 'older')
+  assert.deepEqual(older.entries.map(e => e.key), ['key/100/90', '80', 'key/100/50', '70', '40', 'key/100/20', '10'])
+  assert.strictEqual(older.entries[1].row, original)
+  assert.deepEqual(older.entries.slice(0, first.limit), first.entries.slice(0, first.limit))
+
+  const resumed = await activity.load(Promise.resolve(page), false, false, 'resume')
+  assert.deepEqual(resumed.entries.map(e => e.key), older.entries.map(e => e.key))
+  assert.strictEqual(resumed.entries[1].row, updated)
+
+  const refreshed = await activity.load(Promise.resolve(page), true, true)
+  assert.deepEqual(refreshed.entries.map(e => e.key), ['key/100/90', '80', '70', 'key/100/50', '40', 'key/100/20', '10'])
+})
+
+test('Everyone resuming accepts an own post inserted at the head of the retained post page', async () => {
+  globalThis.fetch = async () => Response.json(answer([purchase(90), purchase(50)]))
+  const post = log => ({ key: BigInt(log), lead: { blockNumber: 100n, logIndex: log } })
+  for (const limit of [1, 4]) {
+    const activity = new EveryoneActivity(mock.chain, market)
+    const page = { rows: [post(80), post(40)], limit, complete: true }
+    await activity.load(Promise.resolve(page), false, false)
+    const resumed = await activity.load(Promise.resolve({ ...page, rows: [post(95), ...page.rows] }), false, false, 'resume')
+    assert.deepEqual(resumed.entries.map(e => e.key), ['95', 'key/100/90', '80', 'key/100/50', '40'])
+  }
+})
+
+test('Everyone resuming accepts an own reply that updates a displayed row activity', async () => {
+  globalThis.fetch = async () => Response.json(answer([purchase(90), purchase(50)]))
+  const activity = new EveryoneActivity(mock.chain, market)
+  const row = { key: 80n, lead: { blockNumber: 100n, logIndex: 80 } }
+  const page = { rows: [row], limit: 3, complete: true }
+  await activity.load(Promise.resolve(page), false, false)
+  const updated = { ...row, activity: { blockNumber: 100n, logIndex: 95 } }
+  const resumed = await activity.load(Promise.resolve({ ...page, rows: [updated] }), false, false, 'resume')
+  assert.deepEqual(resumed.entries.map(e => e.key), ['80', 'key/100/90', 'key/100/50'])
+  assert.strictEqual(resumed.entries[0].row, updated)
+})
+
+test('Everyone resuming retains order only for entries still eligible in the current page', async () => {
+  globalThis.fetch = async () => Response.json(answer([purchase(90)]))
+  const post = log => ({ key: BigInt(log), lead: { blockNumber: 100n, logIndex: log } })
+  const activity = new EveryoneActivity(mock.chain, market)
+  const first = { rows: [post(80), post(60)], limit: 3, complete: true }
+  await activity.load(Promise.resolve(first), false, false)
+  const older = { rows: [...first.rows, post(70)], limit: 4, complete: true }
+  await activity.load(Promise.resolve(older), false, true, 'older')
+  muted.toggle(creator)
+  try {
+    const page = { ...older, rows: [post(60), post(70)] }
+    const resumed = await activity.load(Promise.resolve(page), false, false, 'resume')
+    assert.deepEqual(resumed.entries.map(e => e.key), ['60', '70'])
+  } finally { muted.toggle(creator) }
+})
+
+test('Everyone paging survives failed key reads and appends a successful retry below displayed entries', async () => {
+  let fail = false, calls = 0
+  globalThis.fetch = async url => {
+    calls++
+    if (fail) throw Error('offline')
+    const before = new URL(url, 'https://test.invalid').searchParams.get('before_log')
+    return Response.json(before ? answer([purchase(50)]) : answer([purchase(90)], { block: '100', log: 90 }))
+  }
+  const post = log => ({ key: BigInt(log), lead: { blockNumber: 100n, logIndex: log } })
+  const activity = new EveryoneActivity(mock.chain, market)
+  const first = await activity.load(Promise.resolve({ rows: [post(80)], limit: 1, complete: true }), false, false)
+  assert.deepEqual(first.entries.slice(0, first.limit).map(e => e.key), ['key/100/90'])
+  fail = true
+  const page = { rows: [post(95), post(80), post(40)], limit: 4, complete: true }
+  const failed = await activity.load(Promise.resolve(page), false, true, 'older')
+  assert.equal(failed.keyError, true)
+  assert.deepEqual(failed.entries.map(e => e.key), ['key/100/90', '95', '80', '40'])
+  fail = false
+  const retried = await activity.load(Promise.resolve(page), false, true, 'older')
+  assert.equal(retried.keyError, false)
+  assert.deepEqual(retried.entries.map(e => e.key), ['key/100/90', '95', '80', '40', 'key/100/50'])
+  assert.equal(calls, 4)
+})
+
 test('activity rows link the participants, market and transaction without wallet actions', async () => {
   globalThis.fetch = async () => Response.json(answer([purchase(2)]))
   const [event] = (await readKeyActivity(mock.chain, market)).items

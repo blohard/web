@@ -204,12 +204,12 @@ export function prepareRow(filter: Filter, lead: Posted, source: RowSource, {
 }
 
 /** Build connected rows from the chosen cards. Missing cards are never filled in. */
-export function visibleConversations(previews: ConversationRowData[], ended: ReadonlySet<bigint>, separate: ReadonlySet<bigint>): ConversationRowData[] {
+export function visibleConversations(previews: ConversationRowData[], ended: ReadonlySet<bigint>, separate: ReadonlySet<bigint>, exclude: ReadonlySet<bigint> = new Set()): ConversationRowData[] {
   type Card = { post: Posted | undefined; source: ConversationRowData; root?: ConversationRowData['root'] }
   const cards = new Map<bigint, Card>()
   for (const source of previews) {
-    if (!cards.has(source.root.id)) cards.set(source.root.id, { post: source.root.post, source, root: source.root })
-    for (const { post } of source.cards) cards.set(post.id, { post, source })
+    if (!exclude.has(source.root.id) && !cards.has(source.root.id)) cards.set(source.root.id, { post: source.root.post, source, root: source.root })
+    for (const { post } of source.cards) if (!exclude.has(post.id)) cards.set(post.id, { post, source })
   }
   const owners = new Map<bigint, bigint>()
   const groups = new Map<bigint, Posted[]>()
@@ -237,6 +237,35 @@ export function visibleConversations(previews: ConversationRowData[], ended: Rea
       cards: conversationCards(id, ordered, ended),
     }]
   })
+}
+
+/** Keep displayed rows in place and append only cards they do not already own. */
+export function appendConversations(before: ConversationRowData[], rows: ConversationRowData[], ended: ReadonlySet<bigint>): ConversationRowData[] {
+  if (!before.length) return rows
+  const known = new Set(before.flatMap(row => [row.root.id, ...row.cards.map(card => card.post.id)]))
+  const added = rows.flatMap(row => known.has(row.root.id) || row.cards.some(card => known.has(card.post.id))
+    ? visibleConversations([row], ended, new Set(), known) : [row])
+  added.sort((a, b) => newestFirst(a.activity ?? a.lead, b.activity ?? b.lead))
+  return [...before, ...added]
+}
+
+/** Back keeps row boundaries while still applying current filtering and endings. */
+export function retainedConversations(before: ConversationRowData[], rows: ConversationRowData[], ended: ReadonlySet<bigint>, subjects: ReadonlySet<bigint>): ConversationRowData[] {
+  const available = new Set(subjects)
+  // A new preview cutoff cannot remove a still-eligible displayed post. Keep
+  // its already-shown ancestor path too, without adding any missing context.
+  const displayed = before.flatMap(row => [...(row.root.post ? [row.root.post] : []), ...row.cards.map(card => card.post)])
+  for (const post of displayed.sort(newestFirst)) if (available.has(post.id)) available.add(post.parentId)
+  const kept = before.flatMap(row => {
+    const posts = row.cards.map(card => card.post).filter(post => available.has(post.id))
+    const omitted = row.root.omitted || !available.has(row.root.id)
+    if (omitted && !posts.length) return []
+    return [{ ...row, root: { ...row.root, omitted,
+      drawn: posts.filter(post => post.parentId === row.root.id && !ended.has(post.id)).length,
+      joins: !omitted && posts[0]?.parentId === row.root.id },
+      cards: conversationCards(row.root.id, posts, ended) }]
+  })
+  return appendConversations(kept, rows, ended)
 }
 
 /** Layout follows the cards actually shown, including any gaps in their context. */

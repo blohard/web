@@ -87,6 +87,17 @@ test('local replies respect keyring selection and profile tabs', async () => {
   assert.deepEqual(drawn(await counted(feed.resumeFeed(mock.chain, replies))), [])
 })
 
+test('a profile local reload keeps only the newest three reply previews', async () => {
+  const other = address('33'), f = { kind: 'author', address: other, viewer: author }
+  const history = [feedPost(1, 0, other), ...[2, 3, 4].map(id => feedPost(id, 1, author, other))]
+  feedHistory(history)
+  const replies = page => ids(page.rows.find(row => row.root.id === 1n).cards.map(card => card.post))
+  assert.deepEqual(replies(await counted(feed.loadFeed(mock.chain, f))), [2, 3, 4])
+  feedHistory([...history, feedPost(5, 1, author, other)])
+  await feed.acceptPublication(mock.chain, 5n, 1n)
+  assert.deepEqual(replies(await counted(feed.resumeFeed(mock.chain, f))), [3, 4, 5])
+})
+
 test('a publication does not enter a different chain, Board or index generation', async () => {
   const f = filter(), chain = mock.chain
   feedHistory([feedPost(1)])

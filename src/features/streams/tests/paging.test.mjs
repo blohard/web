@@ -289,6 +289,31 @@ test('joined rows retain each preview cutoff and nested expansion across a local
   assert.deepEqual(ids(expansion.preview(hidden.rows.find(r => r.key === 1n).cards.map(c => c.post))), [2])
 })
 
+test('a new conversation stays outside a collapsed parent on a local reload', async () => {
+  curate([author])
+  const other = address('88'), filter = { kind: 'timeline', curatedOnly: true }
+  const history = [feedPost(1, 0, other), feedPost(2, 1)]
+  feedHistory(history)
+  await loadFeed(mock.chain, filter)
+  const expansion = new RowExpansion(expansionOf(feedKey(mock.chain, filter)), 1n)
+  expansion.hide(2n)
+  feedHistory([...history, feedPost(3, 2, other), feedPost(4, 3)])
+  const page = await loadFeed(mock.chain, filter, { preservePreviews: true })
+  assert.deepEqual(page.rows.map(row => [row.root.id, ...row.cards.map(card => card.post.id)]), [[3n, 4n], [1n, 2n]])
+  assert.equal(expansion.isHidden(2n), true, 'the new conversation does not reopen the collapsed branch')
+})
+
+test('a conversation cannot attach to its muted parent in another row', async t => {
+  curate([author])
+  const { muted } = await load('lib/muted.svelte.ts')
+  const quiet = address('77'), other = address('88'), filter = { kind: 'timeline', curatedOnly: true }
+  muted.toggle(quiet)
+  t.after(() => muted.toggle(quiet))
+  feedHistory([feedPost(1), feedPost(2, 1, quiet), feedPost(3, 2), feedPost(4, 2, other), feedPost(5, 4)])
+  const page = await loadFeed(mock.chain, filter)
+  assert.deepEqual(page.rows.map(row => [row.root.id, ...row.cards.map(card => card.post.id)]), [[4n, 5n], [2n, 3n], [1n]])
+})
+
 test('curated shows every loaded qualifying reply, including earlier replies in a conversation', async () => {
   curate([author])
   const outsider = address('88')

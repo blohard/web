@@ -46,9 +46,9 @@
     const stop = pollVisible(() => current.keys.peek(), value => changed?.(current.keys.changed(value)), () => {}, 30_000, false)
     return () => { stop(); changed?.(false) }
   })
-  function enrich(read: Promise<Page>, refresh: boolean, preserve: boolean): Promise<ActivityPage> {
+  function enrich(read: Promise<Page>, refresh: boolean, preserve: boolean, mode?: 'older' | 'resume'): Promise<ActivityPage> {
     const current = activity, revision = current?.keys.revision
-    const result = current ? current.load(read, refresh, preserve) : read.then(postActivity)
+    const result = current ? current.load(read, refresh, preserve, mode) : read.then(postActivity)
     void result.then(p => { if (activity === current && current?.keys.revision !== revision && !p.keyError) onactivitychange?.(false) }, () => {})
     return result
   }
@@ -116,7 +116,7 @@
       const posts = (saved || fold) && !press
         ? resumeFeed(currentChain, currentFilter, saved?.limit, !fold)
         : loadFeed(currentChain, currentFilter, { preserveVisibleRows: !firstLoad, preservePreviews: !press })
-      const read = enrich(posts, !saved && !fold && (firstLoad || press), !firstLoad)
+      const read = enrich(posts, !saved && !fold && (firstLoad || press), !firstLoad, saved && !fold && !press ? 'resume' : undefined)
       if (press) read.then((p) => pressed.add(p), () => {})
       page = read
       if (firstLoad || currentRefresh !== seenRefresh) gateRefreshReady = read
@@ -152,7 +152,7 @@
   async function showOlder(shown: ActivityPage) {
     if (!page || pagingBusy) return
     const base = page
-    const request = enrich(olderFeed(chain, filter, shown.limit + 20), false, true)
+    const request = enrich(olderFeed(chain, filter, shown.limit + 20), false, true, 'older')
     const screen = new FirstScreen(true)
     const current = { base, request, looking: true, screen, known: new Set(shown.entries.slice(0, shown.limit).map(row => row.key)) }
     walk = current
