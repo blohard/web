@@ -90,13 +90,23 @@ test('each check names what started it, and hidden ticks leave no entries', asyn
   fired.tick()
   visibility('hidden'); visibility('visible')
   finish(0); await flush()
+  // Every leave and return is logged, including a focus that arrives while a
+  // check runs and so starts none: the log must tell it from an event that never came.
   assert.deepEqual(since(), [
     'visible check started poller=home trigger=opened',
+    'hidden page left poller=home cause=visibilitychange',
+    'hidden page left poller=home cause=blur',
+    'visible page returned poller=home cause=visibilitychange running=false away=true recheck=false',
     'visible check started poller=home trigger=return cause=visibilitychange',
+    'visible page returned poller=home cause=focus running=true away=false recheck=false',
     'visible check failed poller=home error=host unreachable',
     'visible check started poller=home trigger=retry',
     'visible check started poller=home trigger=interval',
+    'hidden page left poller=home cause=visibilitychange',
+    'hidden page left poller=home cause=blur',
+    'visible page returned poller=home cause=visibilitychange running=true away=true recheck=false',
     'visible return during a check, checking again after it poller=home cause=visibilitychange',
+    'visible page returned poller=home cause=focus running=true away=false recheck=true',
     'visible check started poller=home trigger=recheck',
   ])
 })

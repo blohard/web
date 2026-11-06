@@ -42,9 +42,15 @@ export function pollVisible<T>(read: () => Promise<T>, update: (value: T) => voi
   // A newly opened tab may still be hidden when its view mounts. Its first
   // display must not wait for the background polling interval.
   if (immediate) void poll('opened')
-  const left = () => { away = true }
+  // Every leave and return is logged before any guard, so the log tells an
+  // event that never arrived from one that arrived and started no check.
+  const left = (event?: Event) => {
+    if (label) notePoll('page left', { poller: label, cause: event?.type })
+    away = true
+  }
   const returned = (event?: Event) => {
-    if (document.visibilityState !== 'visible') { left(); return }
+    if (document.visibilityState !== 'visible') { left(event); return }
+    if (label) notePoll('page returned', { poller: label, cause: event?.type, running, away, recheck })
     // An outstanding read may have captured its answer before we left.
     // Remember this return, but coalesce its focus and visibility events.
     if (away && running) {
