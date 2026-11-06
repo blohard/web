@@ -182,7 +182,7 @@
     // Its answers also carry the reader's new replies, mentions and quotes to the notifications dot.
     const listener = wallet.account ? notificationDot.listen(c, wallet.account) : undefined
     return pollVisible(() => peekFeed(c, f, listener), () => {},
-      () => { /* A later poll retries; keep the last cue. */ }, 30_000)
+      () => { /* A later poll retries; keep the last cue. */ }, 30_000, true, 'home')
   })
 </script>
 

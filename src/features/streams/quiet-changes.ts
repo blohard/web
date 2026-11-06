@@ -2,6 +2,7 @@ import type { Address } from 'viem'
 import * as api from '../../lib/api'
 import { sameAddress } from '../../lib/format'
 import type { ChainInfo } from '../../lib/types'
+import { notePoll } from '../../shared/poll-log'
 
 /** Another reader of a poll's answers: the account its scope adds, and what hears each answer. */
 export type Listener = { account: Address; heard: (answer: api.Changes, from: api.At) => unknown }
@@ -58,7 +59,11 @@ export class QuietChanges {
     } catch (error) {
       // The host no longer serves this view's position: only a refresh,
       // which starts the view over, can show what changed.
-      if (api.positionLost(error)) { scan.refreshRequired = true; return Infinity }
+      if (api.positionLost(error)) {
+        notePoll('changes position lost, refresh required', { after: from.sequence })
+        scan.refreshRequired = true
+        return Infinity
+      }
       throw error
     }
     heard?.(answer, from)
@@ -77,6 +82,7 @@ export class QuietChanges {
     scan.rows = rows
     scan.from = api.afterChanges(from, answer)
     scan.until = answer.more ? answer.until : undefined
+    notePoll('changes read', { after: from.sequence, through: answer.through, more: answer.more, records: answer.records.length, waiting: rows.size })
     return this.pending(base)
   }
 }

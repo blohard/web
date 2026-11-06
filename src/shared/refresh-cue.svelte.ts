@@ -1,23 +1,35 @@
 import { pollVisible } from './visible-poll'
+import { notePoll } from './poll-log'
 
 // What a quiet poll found: how many posts a refresh would add to the view on
 // screen. The mounted stream or thread owns the count, the refresh button
 // shows it, and a refresh clears it. Nothing on screen moves until the reader
-// presses refresh.
+// presses refresh. Changes to the count go to the opt-in poll log.
 class RefreshCue {
   private value = $state(0)
+  /** The same count outside reactivity: views take and set it inside effects, which must not subscribe to it. */
+  private logged = 0
   private countedBy: object | null = null
   get count() { return this.value }
-  clear() { this.value = 0 }
+  clear() { this.write(0, 'refresh') }
+
+  private write(count: number, by: string) {
+    if (count !== this.logged) notePoll('refresh count changed', { from: this.logged, to: count, by })
+    this.logged = count
+    this.value = count
+  }
 
   /** The mounted view owns its count; an older view cannot update or clear it. */
   cueCount(initial = 0) {
     const owner = {}
     this.countedBy = owner
-    this.value = initial
+    this.write(initial, 'a new view')
     return {
-      set: (count: number) => { if (this.countedBy === owner) this.value = count },
-      stop: () => { if (this.countedBy === owner) { this.countedBy = null; this.clear() } },
+      set: (count: number) => {
+        if (this.countedBy === owner) this.write(count, 'its view')
+        else if (count) notePoll('refresh count from a departed view ignored', { count })
+      },
+      stop: () => { if (this.countedBy === owner) { this.countedBy = null; this.write(0, 'its view leaving') } },
     }
   }
   // Key activity or membership changes can require refresh without adding posts. The page on
@@ -37,12 +49,13 @@ class RefreshCue {
    * how many rows a refresh of the view on screen would add, and the number
    * cues the refresh button; null keeps the count it has. Call from an effect
    * after reading what the view depends on and return the cleanup, which also
-   * clears the count: a new view or a refresh starts over.
+   * clears the count: a new view or a refresh starts over. `label` names the
+   * view in the opt-in poll log.
    */
-  poll(peek: () => Promise<number | null>): () => void {
+  poll(peek: () => Promise<number | null>, label?: string): () => void {
     const cue = this.cueCount()
     const stop = pollVisible(peek, (n) => { if (n !== null) cue.set(n) },
-      () => { /* A later poll retries; keep the last cue. */ }, 30_000, false)
+      () => { /* A later poll retries; keep the last cue. */ }, 30_000, false, label)
     return () => {
       stop()
       cue.stop()

@@ -143,7 +143,7 @@
     return refreshCue.poll(async () => {
       const loaded = await p.catch(() => null)
       return loaded ? peekReplies(c, loaded.replies, shown, listener) : null
-    })
+    }, 'thread')
   })
 </script>
 

@@ -135,7 +135,7 @@
     void reloadRevision
     void inPlaceReloadRevision
     void muted.addresses
-    return pollVisible(() => peekFeed(c, f), () => {}, () => {}, 30_000)
+    return pollVisible(() => peekFeed(c, f), () => {}, () => {}, 30_000, true, 'profile')
   })
 
   /**

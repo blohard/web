@@ -4,6 +4,7 @@
 import { selectConversations } from './feed-selection'
 import { listening, QuietChanges, type Listener } from './quiet-changes'
 import { SerialQueue } from '../../shared/serial-queue'
+import { notePoll, warnPoll } from '../../shared/poll-log'
 import { SvelteMap } from 'svelte/reactivity'
 import * as api from '../../lib/api'
 import { endingOf, newestFirst, oldestFirst } from '../../lib/board'
@@ -367,7 +368,10 @@ export async function peekFeed(chain: ChainInfo, filter: Filter, listener?: List
   const v = views.get(key)
   // Mounting starts the poll alongside the load or resume of its snapshot.
   if (v?.loading) await v.loading.catch(() => {})
-  if (!v?.at || v.loading) return null
+  if (!v?.at || v.loading) {
+    notePoll('feed check skipped', { view: viewName(filter), why: v?.at ? 'the stream is loading' : 'no snapshot yet' })
+    return null
+  }
   const branches = completeStreamBranches(chain, key)
   const profile = filter.kind === 'author' || filter.kind === 'author-replies'
   const displayed = new Set(profile ? v.selection?.rows.slice(0, v.limit)
@@ -390,8 +394,31 @@ export async function peekFeed(chain: ChainInfo, filter: Filter, listener?: List
     return displayed.has(row.id) && v.counts.has(row.id) && row.replies !== v.counts.get(row.id)
   }) : undefined)
   const pending = policyChanged(v) ? Infinity : count
-  if (mounted === owner && owner?.key === key && v.at === at && !v.loading) owner.cue(pending)
+  if (mounted === owner && owner?.key === key && v.at === at && !v.loading) {
+    owner.cue(pending)
+    notePoll('feed check answered', { view: viewName(filter), count: pending })
+  } else {
+    // The posts stay in the quiet scan, and the next check shows them.
+    const report = pending ? warnPoll : notePoll
+    report('feed count not shown', { view: viewName(filter), count: pending, why: unshown(owner, key, v, at) })
+  }
   return pending
+}
+
+/** A stream's name in the opt-in poll log. */
+function viewName(filter: Filter): string {
+  return filter.kind === 'timeline' ? filter.curatedOnly ? 'curated' : 'everyone' : filter.kind
+}
+
+/** Why a check's count could not reach the refresh button, for the opt-in poll log. */
+function unshown(owner: typeof mounted, key: string, v: View, at: api.At): string {
+  const why: string[] = []
+  if (!owner) why.push('no stream was on screen when the check began')
+  else if (mounted !== owner) why.push(mounted?.key === key ? 'the stream was mounted again during the check' : 'the stream left the screen during the check')
+  else if (owner.key !== key) why.push('another stream is on screen')
+  if (v.at !== at) why.push('the snapshot moved during the check')
+  if (v.loading) why.push('the stream was loading')
+  return why.join(' and ')
 }
 
 function policyChanged(view: View): boolean {
