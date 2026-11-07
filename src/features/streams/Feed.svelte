@@ -99,7 +99,7 @@
     const key = identity, currentChain = chain, currentFilter = filter, currentReload = reloadRevision, currentRefresh = refreshRevision, home = topRequest
     void inPlaceReloadRevision
     void muted.addresses
-    untrack(() => {
+    return untrack(() => {
       const firstLoad = loaded !== key
       const press = !firstLoad && currentRefresh !== seenRefresh
       const fold = !!home && !home.folded
@@ -125,6 +125,7 @@
         () => { if (page === read) { screen?.start(); onsettled?.(currentReload, true) } },
         () => { if (page === read) { screen?.finish(); onsettled?.(currentReload, false) } },
       )
+      return press ? refreshCue.during(read) : undefined
     })
   })
   // Home shares its poll with notifications. Profile streams need their own,

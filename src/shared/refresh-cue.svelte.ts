@@ -13,6 +13,18 @@ class RefreshCue {
   get count() { return this.value }
   clear() { this.write(0, 'refresh') }
 
+  private reading = $state.raw<object | null>(null)
+  get busy() { return this.reading !== null }
+
+  /** Keep the control busy for this view's refresh. Return the cleanup when the view leaves or replaces its read. */
+  during(request: Promise<unknown>): () => void {
+    const reading = {}
+    this.reading = reading
+    const stop = () => { if (this.reading === reading) this.reading = null }
+    void request.then(stop, stop)
+    return stop
+  }
+
   private write(count: number, by: string) {
     if (count !== this.logged) notePoll('refresh count changed', { from: this.logged, to: count, by })
     this.logged = count

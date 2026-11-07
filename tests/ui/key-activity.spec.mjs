@@ -1,4 +1,4 @@
-import { test, expect, author, stranger, card } from './host.mjs'
+import { test, expect, author, stranger, card, deferred } from './host.mjs'
 
 const tx = `0x${'44'.repeat(32)}`
 const purchase = block => ({ position: { block: String(block), log: 1 }, timestamp: 1_800_000_000 + block, transaction: tx,
@@ -101,4 +101,108 @@ test('activation cards show initial purchases once, including activation without
   await expect(activity(page).nth(2)).not.toContainText('bought')
   await expect(activity(page).nth(1).getByRole('link').first()).toHaveAttribute('href', `/u/84532/${author}/keys`)
   await expect(activity(page).first()).toContainText("bob.eth just bought 2 of alice.eth's keys!")
+})
+
+
+for (const width of [390, 1100]) for (const updates of ['posts', 'keys', 'both']) {
+  test(`refresh acknowledges ${updates} updates while key activity is loading at ${width}px`, async ({ page, host }) => {
+    await page.setViewportSize({ width, height: 900 })
+    let items = [purchase(10)]
+    await configure(page, host, () => ({ items, next: null }))
+    await page.clock.install()
+    host.post(20, 'Old post')
+    await page.goto('/')
+    await expect(card(page, 20)).toBeVisible()
+    await expect(activity(page)).toHaveCount(1)
+    if (updates !== 'keys') host.post(30, 'New post')
+    if (updates !== 'posts') items = [purchase(40), purchase(10)]
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    const refresh = page.locator('.refresh-control')
+    await expect(refresh).toBeVisible()
+    if (updates !== 'keys') await expect(refresh).toContainText('1 new')
+    if (updates !== 'posts') await expect(refresh).toHaveAttribute('title', 'new activity is waiting. press to show it')
+    const started = deferred(), release = deferred()
+    let reads = 0
+    await page.route('**/keyring/activity?*', async route => {
+      reads++
+      started.resolve()
+      await release.promise
+      await route.fallback()
+    })
+    try {
+      await refresh.click()
+      await started.promise
+      await expect(refresh).toHaveAttribute('aria-busy', 'true')
+      await expect(refresh).toHaveAttribute('aria-disabled', 'true')
+      await expect(refresh).toContainText('refreshing')
+      await page.clock.runFor(350)
+      await expect(refresh.locator('.spinner')).toBeVisible()
+      // A second event cannot enqueue another refresh, even without native disabling.
+      await refresh.dispatchEvent('click')
+      await page.clock.runFor(350)
+      expect(reads).toBe(1)
+      await expect(card(page, 20)).toBeVisible()
+      await expect(card(page, 30)).toHaveCount(0)
+    } finally { release.resolve() }
+    if (updates !== 'keys') await expect(card(page, 30)).toBeVisible()
+    await expect(activity(page)).toHaveCount(updates === 'posts' ? 1 : 2)
+    await page.clock.runFor(200)
+    await expect(refresh).toHaveCount(0)
+    expect(reads).toBe(1)
+  })
+}
+
+test('a failed key refresh releases the button and lets the reader retry', async ({ page, host }) => {
+  let items = [purchase(10)], available = true
+  await configure(page, host, () => available ? { items, next: null } : null)
+  host.post(20, 'Old post')
+  await page.goto('/')
+  await expect(card(page, 20)).toBeVisible()
+  items = [purchase(40), purchase(10)]
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  const refresh = page.locator('.refresh-control')
+  await expect(refresh).toBeVisible()
+  available = false
+  await refresh.click()
+  await expect(page.getByText('could not update key activity.')).toBeVisible()
+  await expect(refresh).toHaveAttribute('aria-busy', 'false')
+  await expect(refresh).toHaveAttribute('aria-disabled', 'false')
+  await expect(activity(page)).toHaveCount(1)
+  available = true
+  await refresh.click()
+  await expect(activity(page)).toHaveCount(2)
+  await expect(page.getByText('could not update key activity.')).toHaveCount(0)
+  await expect(refresh).toHaveCount(0)
+})
+
+test('leaving a pending refresh does not keep the next stream busy', async ({ page, host }) => {
+  let items = [purchase(10)]
+  await configure(page, host, () => ({ items, next: null }))
+  host.post(20, 'Old post')
+  await page.goto('/')
+  await expect(card(page, 20)).toBeVisible()
+  items = [purchase(40), purchase(10)]
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  const refresh = page.locator('.refresh-control')
+  await expect(refresh).toBeVisible()
+  const started = deferred(), release = deferred()
+  await page.route('**/keyring/activity?*', async route => {
+    started.resolve()
+    await release.promise
+    await route.fallback()
+  }, { times: 1 })
+  try {
+    await refresh.click()
+    await started.promise
+    await expect(refresh).toHaveAttribute('aria-busy', 'true')
+    await page.getByRole('button', { name: '[ following ]', exact: true }).click()
+    await expect(card(page, 20)).toBeVisible()
+    await expect(refresh).toHaveCount(0)
+  } finally { release.resolve() }
+  host.post(30, 'New followed post')
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  await expect(refresh).toContainText('1 new')
+  await expect(refresh).toHaveAttribute('aria-busy', 'false')
+  await refresh.click()
+  await expect(card(page, 30)).toBeVisible()
 })

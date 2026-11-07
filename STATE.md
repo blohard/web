@@ -172,6 +172,11 @@ in `moderation.ts`, `post-reply-rule.ts` and `message-actions.svelte.ts`.
 
 ## Refresh signals
 
+An explicit stream refresh keeps its control visible as “refreshing…” until the
+post and key-activity reads settle. Repeat presses are ignored while it is busy,
+and the spinner appears after the usual 300 ms delay. Failure or leaving the
+stream releases the control. A failed key read keeps its activity cue for retry.
+
 `refreshRevision` advances when the reader presses refresh. `reloadRevision`
 also advances after local actions or retries. Home's `actionReloadRevision`
 reloads after a publication. Feed's `inPlaceReloadRevision` reloads after a

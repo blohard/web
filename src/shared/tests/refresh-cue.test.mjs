@@ -192,3 +192,39 @@ for (const departure of ['hidden', 'unmounted']) test(`a queued return check sto
     assert.equal(refreshCue.count, 0)
   }
 })
+
+
+for (const fails of [false, true]) test(`an explicit refresh stays busy until its read ${fails ? 'fails' : 'finishes'}`, async () => {
+  let finish, fail
+  const read = new Promise((resolve, reject) => { finish = resolve; fail = reject })
+  const stop = refreshCue.during(read)
+  assert.equal(refreshCue.busy, true)
+  refreshCue.clear()
+  assert.equal(refreshCue.busy, true, 'clearing the count does not end the read')
+  if (fails) fail(Error('offline'))
+  else finish()
+  await flush()
+  assert.equal(refreshCue.busy, false)
+  stop()
+})
+
+test('a replaced or departed refresh cannot clear the current read', async () => {
+  let first, second
+  const old = refreshCue.during(new Promise(resolve => { first = resolve }))
+  const current = refreshCue.during(new Promise(resolve => { second = resolve }))
+  old()
+  first()
+  await flush()
+  assert.equal(refreshCue.busy, true)
+  current()
+  assert.equal(refreshCue.busy, false, 'leaving the view releases its pending control')
+  let third
+  const next = refreshCue.during(new Promise(resolve => { third = resolve }))
+  second()
+  await flush()
+  assert.equal(refreshCue.busy, true, 'a late result from a departed view cannot finish the next refresh')
+  third()
+  await flush()
+  assert.equal(refreshCue.busy, false)
+  next()
+})

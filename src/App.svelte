@@ -7,6 +7,7 @@
   import { keyControls } from './features/keys/key-controls.svelte'
   import { forgetKeyrings } from './features/keys/keyring'
   import { refreshCue } from './shared/refresh-cue.svelte'
+  import { loadingDelay } from './shared/loading-delay.svelte'
   import { host } from './lib/host.svelte'
   import { hostStatus, readRelay } from './lib/host-status.svelte'
   import { readHostPolicy, watchHostPolicy } from './lib/host-policy'
@@ -38,6 +39,7 @@
   let selectedId = $state<number | null>(readJSON<number | null>(STORAGE_KEY, null))
   /** Bumped by the refresh control; every page reloads what it shows. */
   let refreshRevision = $state(0)
+  const refreshSpinner = loadingDelay(() => refreshCue.busy ? refreshCue : null)
   /** The effective stream, lent by Home while it is mounted. */
   let homeStream = $state.raw<(() => string) | null>(null)
   const stream = $derived(router.route.kind === 'home' ? homeStream?.() : null)
@@ -71,6 +73,7 @@
 
   /** Every view reloads; the reader's own sponsorship is asked again too, so being added shows up at once. */
   function refresh() {
+    if (refreshCue.busy) return
     if (selected && wallet.account) {
       void readHostPolicy().catch(() => {})
       sponsorship.forget(selected, wallet.account)
@@ -155,10 +158,11 @@
           {#if routeChain}<span class="dim small">· {chainTag(routeChain)}</span>{/if}
         </button>
       </h1>
-      {#if status && status.chains.length > 0 && refreshCue.highlighted}
-        <!-- Present only when a quiet poll found something to add. It floats under the header, or under a tab row on screen, so nothing moves. -->
-        <button class="refresh-control small fresh" use:belowTabs transition:fly={{ y: -6, duration: reduceMotion ? 0 : 180 }} onclick={refresh} title={refreshCue.changed ? 'new activity is waiting. press to show it' : 'new posts are waiting. press to show them'}>
-          {refreshCue.count === Infinity ? 'refresh · new' : refreshCue.count ? `refresh · ${refreshCue.count} new` : 'refresh'}
+      {#if status && status.chains.length > 0 && (refreshCue.highlighted || refreshCue.busy)}
+        <!-- A refresh stays visible while its stream loads. It floats under the header, or under a tab row on screen, so nothing moves. -->
+        <button class="refresh-control small fresh" class:working={refreshSpinner()} aria-disabled={refreshCue.busy} aria-busy={refreshCue.busy} use:belowTabs transition:fly={{ y: -6, duration: reduceMotion ? 0 : 180 }} onclick={refresh} title={refreshCue.busy ? 'refreshing…' : refreshCue.changed ? 'new activity is waiting. press to show it' : 'new posts are waiting. press to show them'}>
+          <span class="spinner" aria-hidden="true"></span>
+          {refreshCue.busy ? 'refreshing…' : refreshCue.count === Infinity ? 'refresh · new' : refreshCue.count ? `refresh · ${refreshCue.count} new` : 'refresh'}
         </button>
       {/if}
     </header>
