@@ -92,7 +92,8 @@ test('each check names what started it, and hidden ticks leave no entries', asyn
   finish(0); await flush()
   // Every leave and return is logged, including a focus that arrives while a
   // check runs and so starts none: the log must tell it from an event that never came.
-  assert.deepEqual(since(), [
+  assert.deepEqual(since().map(line => line.replace(/ id=\d+$/, ' id=#')), [
+    'visible poller opened poller=home id=#',
     'visible check started poller=home trigger=opened',
     'hidden page left poller=home cause=visibilitychange',
     'hidden page left poller=home cause=blur',
@@ -161,4 +162,29 @@ test('a count found while its stream is mounted again is reported, and kept for 
   assert.deepEqual(reported, ['visible feed count not shown view=everyone count=1 why=the stream was mounted again during the check'])
   assert.equal(warn.mock.callCount(), 1)
   assert.equal(feed.feedCue(mock.chain, f), 1, 'the next check still finds the post')
+  // The log shows the remount itself: one stream leaving, another arriving under a new number.
+  const [left, arrived] = since().filter(line => line.includes(' stream '))
+  const number = line => Number(/ id=(\d+)/.exec(line)[1])
+  assert.match(left, /^visible stream unmounted view=everyone id=\d+$/)
+  assert.match(arrived, /^visible stream mounted view=everyone id=\d+ resume=true$/)
+  assert.notEqual(number(arrived), number(left))
+})
+
+test('each poller logs its opening and closing under its own number', t => {
+  switchOn()
+  timers(t)
+  const since = mark()
+  const open = label => pollVisible(async () => 0, () => {}, () => {}, 30_000, false, label)
+  const home = open('home'), policy = open('policy')
+  // A second close of the same poller adds nothing.
+  home(); home(); policy()
+  const lines = since()
+  const number = line => Number(/ id=(\d+)$/.exec(line)[1])
+  const first = number(lines[0])
+  assert.deepEqual(lines, [
+    `visible poller opened poller=home id=${first}`,
+    `visible poller opened poller=policy id=${first + 1}`,
+    `visible poller closed poller=home id=${first}`,
+    `visible poller closed poller=policy id=${first + 1}`,
+  ])
 })

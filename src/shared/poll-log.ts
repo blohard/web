@@ -1,5 +1,5 @@
-// An opt-in record of the refresh cue's checks, for finding out why a refresh
-// button appeared late. It is off unless this browser switches it on:
+// An opt-in record of the page's background checks, for finding out why a
+// refresh button appeared late. It is off unless this browser switches it on:
 //
 //   localStorage.setItem('blohard.debug.polls', 'true')
 //
@@ -8,15 +8,26 @@
 // tab has not reloaded. A count that a check found but could not show also logs
 // a console warning. While it is off, nothing is recorded and nothing is added
 // to the page.
+//
+// Entries name what happened and never what was read: a poller or stream by its
+// kind and a small instance number, never a post's text, an account or a filter.
 import { readJSON } from '../lib/storage'
 
 const FLAG = 'blohard.debug.polls'
-/** Enough for several minutes of polling around a return. Hidden ticks are not recorded. */
-const KEEP = 60
+/** Enough for several minutes of every poller's checks around a return. Hidden ticks are not recorded. */
+const KEEP = 120
 
 type Detail = Record<string, string | number | boolean | null | undefined>
 const entries: string[] = []
 let installed = false
+let instances = 0
+
+/**
+ * A small number that tells one poller or mounted stream from the next of its
+ * kind. The log pairs each opening with its closing by it, so a poller that
+ * closed and opened again shows as two numbers.
+ */
+export function instance(): number { return ++instances }
 
 /** Read on every entry, so the switch works without a reload; checks are seconds apart. */
 function on(): boolean {

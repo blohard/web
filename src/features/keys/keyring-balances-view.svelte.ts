@@ -35,7 +35,7 @@ export class KeyringBalancesView {
   watch() {
     const side = this.side, after = this.after, key = this.key, watch = ++this.watches
     const stopRead = this.page.watch(this.read(side, after), key)
-    const stopPoll = pollVisible(() => this.read(side, after), latest => { this.polled = { key, watch, page: latest } }, () => { /* Keep the last view and cue. A later poll or refresh retries. */ }, 30_000, false)
+    const stopPoll = pollVisible(() => this.read(side, after), latest => { this.polled = { key, watch, page: latest } }, () => { /* Keep the last view and cue. A later poll or refresh retries. */ }, 30_000, false, 'balances')
     return () => { stopRead(); stopPoll() }
   }
 

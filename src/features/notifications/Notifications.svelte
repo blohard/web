@@ -45,7 +45,7 @@
   $effect(() => {
     const keys = activity?.keys ?? []
     return untrack(() => {
-      const stops = keys.map(key => pollVisible(() => key.peek(), head => key.observe(head), () => {}, 30_000, false))
+      const stops = keys.map(key => pollVisible(() => key.peek(), head => key.observe(head), () => {}, 30_000, false, 'key notices'))
       return () => stops.forEach(stop => stop())
     })
   })

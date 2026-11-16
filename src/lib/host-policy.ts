@@ -57,7 +57,7 @@ export function watchHostPolicy(): () => void {
     () => host.status?.host_policy ? requestPath<HostPolicy | null>('/api/host-policy') : Promise.resolve(undefined),
     policy => { if (policy !== undefined) adoptPolicy(policy) },
     () => { /* Keep the last known policy. Writes still check at the host. */ },
-    30_000, false,
+    30_000, false, 'policy',
   )
 }
 

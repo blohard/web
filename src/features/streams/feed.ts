@@ -4,7 +4,7 @@
 import { selectConversations } from './feed-selection'
 import { listening, QuietChanges, type Listener } from './quiet-changes'
 import { SerialQueue } from '../../shared/serial-queue'
-import { notePoll, warnPoll } from '../../shared/poll-log'
+import { instance, notePoll, warnPoll } from '../../shared/poll-log'
 import { SvelteMap } from 'svelte/reactivity'
 import * as api from '../../lib/api'
 import { endingOf, newestFirst, oldestFirst } from '../../lib/board'
@@ -58,9 +58,14 @@ let mounted: { key: string; cue: (count: number) => void } | null = null
 /** Register the visible stream; only a resumed snapshot keeps its old cue. */
 export function mountFeed(chain: ChainInfo, filter: Filter, cue: (count: number) => void, { resume = false }: { resume?: boolean } = {}): () => void {
   const view = { key: feedKey(chain, filter), cue }
+  const id = instance()
   mounted = view
+  notePoll('stream mounted', { view: viewName(filter), id, resume })
   cue(resume ? feedCue(chain, filter) : 0)
-  return () => { if (mounted === view) mounted = null }
+  return () => {
+    notePoll('stream unmounted', { view: viewName(filter), id })
+    if (mounted === view) mounted = null
+  }
 }
 /** A view as a first visit finds it. */
 function blank(chain: ChainInfo, filter: Filter): View {

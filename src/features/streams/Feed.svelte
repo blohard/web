@@ -44,7 +44,7 @@
     const current = activity, changed = onactivitychange
     return untrack(() => {
       if (!current) { changed?.(false); return }
-      const stop = pollVisible(() => current.keys.peek(), value => changed?.(current.keys.changed(value)), () => {}, 30_000, false)
+      const stop = pollVisible(() => current.keys.peek(), value => changed?.(current.keys.changed(value)), () => {}, 30_000, false, 'key activity')
       return () => { stop(); changed?.(false) }
     })
   })

@@ -19,7 +19,7 @@ export class KeyringView {
       this.observe(result, applyNext)
       if (applyNext) applied?.()
       applyNext = false
-    }, error => { this.error = explain(error) }, selected ? 30_000 : 300_000)
+    }, error => { this.error = explain(error) }, selected ? 30_000 : 300_000, true, 'keyring')
   }
 
   observe(value: Keyring, apply: boolean) {

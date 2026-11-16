@@ -1,7 +1,7 @@
 // Background polling for what a visible page shows: the refresh cue's quiet
 // poll, keyring pages and key notifications share it.
 import { untrack } from 'svelte'
-import { notePoll } from './poll-log'
+import { instance, notePoll } from './poll-log'
 
 /** A read that fails right after the page returns is tried once more this soon, not at the next interval. */
 const RETURN_RETRY_MS = 5_000
@@ -15,12 +15,14 @@ type Trigger = 'opened' | 'interval' | 'return' | 'retry' | 'recheck'
 
 /**
  * Read immediately when requested, then poll visible pages and on return; never overlap or update after cleanup.
- * A `label` puts this poller's checks in the opt-in poll log (shared/poll-log.ts).
+ * A `label` puts this poller's opening, checks and closing in the opt-in poll log (shared/poll-log.ts).
  */
 export function pollVisible<T>(read: () => Promise<T>, update: (value: T) => void,
   failed: (error: unknown) => void, interval: number, immediate = true, label?: string): () => void {
   let stopped = false, running = false, away = false, recheck = false
   let retry: ReturnType<typeof setTimeout> | null = null
+  const id = label ? instance() : 0
+  if (label) notePoll('poller opened', { poller: label, id })
   async function poll(trigger: Trigger, cause?: string) {
     if (stopped || running || (trigger !== 'opened' && document.visibilityState !== 'visible')) return
     if (retry !== null) { clearTimeout(retry); retry = null }
@@ -75,6 +77,7 @@ export function pollVisible<T>(read: () => Promise<T>, update: (value: T) => voi
   // The callback returns the check, so a test driving the interval can wait for it.
   const timer = setInterval(() => poll('interval'), interval)
   return () => {
+    if (label && !stopped) notePoll('poller closed', { poller: label, id })
     stopped = true
     clearInterval(timer)
     if (retry !== null) { clearTimeout(retry); retry = null }
