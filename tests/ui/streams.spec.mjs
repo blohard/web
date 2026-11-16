@@ -1003,6 +1003,60 @@ test('Everyone checks again on window return when an older poll is still answeri
   await expect(card(page, 2)).toBeVisible()
 })
 
+test('a host policy answer during a return check keeps the refresh count of a resumed stream', async ({ page, host }) => {
+  host.policy([author])
+  for (let id = 1; id <= 25; id++) host.post(id, `Post ${id}\nEnough text for a scrollable stream.`)
+  const feedCheck = request => request.url().endsWith('/changes') && !!request.postDataJSON().scope.feed
+  await page.clock.install()
+  await page.goto('/')
+  await page.getByRole('button', { name: '[ everyone ]', exact: true }).click()
+  await expect(card(page, 15)).toBeVisible()
+  // Back from a thread resumes the stream at its saved place. Only a resumed
+  // stream reads the host policy as it mounts.
+  await card(page, 15).getByRole('link', { name: 'open post #15', exact: true }).click()
+  await expect(page).toHaveURL(/\/p\/84532\/15$/)
+  await expect(card(page, 15)).toBeVisible()
+  const mounted = page.waitForEvent('requestfinished', { predicate: feedCheck })
+  await page.goBack()
+  await expect(page).toHaveURL(/\/$/)
+  await expect(card(page, 15)).toBeVisible()
+  await mounted
+  await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now() + 100)))
+
+  host.post(26, 'First new post', { who: stranger })
+  host.post(27, 'Second new post', { who: stranger })
+  // The return starts a stream check and a policy check together. The stream's
+  // answer is held until the policy answer has landed.
+  const started = deferred(), release = deferred(), policyDone = deferred()
+  await page.route('**/changes', async route => {
+    if (!feedCheck(route.request())) return route.fallback()
+    const answer = await host.answer(route.request())
+    started.resolve()
+    await release.promise
+    await fulfill(route, answer)
+  }, { times: 1 })
+  await page.route('**/api/host-policy', async route => {
+    await fulfill(route, await host.answer(route.request()))
+    policyDone.resolve()
+  }, { times: 1 })
+  try {
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('blur'))
+      window.dispatchEvent(new Event('focus'))
+    })
+    await Promise.all([started.promise, policyDone.promise])
+    await page.clock.runFor(100)
+    const finished = page.waitForEvent('requestfinished', { predicate: feedCheck })
+    release.resolve()
+    await finished
+    await page.clock.runFor(100)
+    // The clock never reaches the next 30-second check. Only the held answer can cue this.
+    await expect(page.getByRole('button', { name: '[ refresh · 2 new ]', exact: true })).toBeVisible({ timeout: 1500 })
+    await expect(card(page, 26)).toHaveCount(0)
+    await expect(card(page, 27)).toHaveCount(0)
+  } finally { release.resolve() }
+})
+
 for (const reply of [false, true]) test(`exhausted free posts automatically use wallet gas for a ${reply ? 'reply' : 'post'}`, async ({ page, host }) => {
   host.post(1, 'Parent post')
   await publication(page, host, { parent: reply ? 1 : 0 })

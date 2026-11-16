@@ -60,10 +60,16 @@
   // One delay spans the page read and its cards preparing their first display.
   const spinnerReady = untrack(() => waited) ?? loadingDelay(() => identity)
   $effect(() => {
-    const cue = refreshCue.cueCount()
-    const resume = untrack(() => !!streamPosition(feedKey(chain, filter), positions))
-    const leave = mountFeed(chain, filter, cue.set, { resume })
-    return () => { leave(); cue.stop() }
+    const current = chain, selection = filter
+    // Only a new chain or filter mounts the stream again. A resumed mount reads
+    // the host policy to take its count, and must not follow it: each policy
+    // poll would mount the stream again and drop the count of a check in flight.
+    return untrack(() => {
+      const cue = refreshCue.cueCount()
+      const resume = !!streamPosition(feedKey(current, selection), positions)
+      const leave = mountFeed(current, selection, cue.set, { resume })
+      return () => { leave(); cue.stop() }
+    })
   })
   /**
    * Conversations opened in place under their cards, and the choices made inside
