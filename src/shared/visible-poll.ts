@@ -1,5 +1,6 @@
 // Background polling for what a visible page shows: the refresh cue's quiet
 // poll, keyring pages and key notifications share it.
+import { untrack } from 'svelte'
 import { notePoll } from './poll-log'
 
 /** A read that fails right after the page returns is tried once more this soon, not at the next interval. */
@@ -41,7 +42,11 @@ export function pollVisible<T>(read: () => Promise<T>, update: (value: T) => voi
   }
   // A newly opened tab may still be hidden when its view mounts. Its first
   // display must not wait for the background polling interval.
-  if (immediate) void poll('opened')
+  // This first check starts inside the effect that opened the poller. What the
+  // reader reads before its first wait, and what the failure callback reads when
+  // the reader throws at once, must not become something that effect follows:
+  // a later change to it would close this poller and open another.
+  if (immediate) untrack(() => { void poll('opened') })
   // Every leave and return is logged before any guard, so the log tells an
   // event that never arrived from one that arrived and started no check.
   const left = (event?: Event) => {

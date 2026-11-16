@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { after, test } from 'node:test'
 import { load, teardown } from '../../../scripts/harness.mjs'
+import { reactiveFixture } from '../../../scripts/svelte-test.mjs'
 const { pollVisible } = await load('shared/visible-poll.ts')
+const { poller, flushSync } = await reactiveFixture(new URL('./fixtures/visible-poll.svelte.ts', import.meta.url))
 after(teardown)
 const flush = () => new Promise((r) => setImmediate(r))
 
@@ -145,4 +147,21 @@ test('a delayed retry does not read after the page is hidden', async t => {
   p.show(); await flush()
   assert.deepEqual(r.values, [6], 'the next return still reads immediately')
   stop()
+})
+
+for (const throws of [false, true]) test(`an effect that opens a poller follows only its own inputs${throws ? ', also when the first read throws at once' : ''}`, t => {
+  page(t)
+  const view = poller(throws)
+  // The poller leaves before the page does.
+  try {
+    flushSync()
+    assert.equal(view.opened, 1)
+    // What the first check and its failure callback read belongs to them alone.
+    view.change('reader'); flushSync()
+    view.change('failure'); flushSync()
+    assert.equal(view.opened, 1, 'the poller stays open')
+    // What the effect read itself still closes the poller and opens another.
+    view.change('input'); flushSync()
+    assert.equal(view.opened, 2)
+  } finally { view.stop() }
 })
