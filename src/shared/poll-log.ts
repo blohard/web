@@ -4,14 +4,15 @@
 //   localStorage.setItem('blohard.debug.polls', 'true')
 //
 // and the next check starts recording. The page keeps its latest entries in
-// memory, and `copy(blohardPolls())` in the console copies them, as long as the
-// tab has not reloaded. A count that a check found but could not show also logs
-// a console warning. While it is off, nothing is recorded and nothing is added
-// to the page.
+// memory, and `copy(blohardPolls())` in the console copies them under a line
+// naming the page's build (shared/build.ts), as long as the tab has not
+// reloaded. A count that a check found but could not show also logs a console
+// warning. While it is off, nothing is recorded and the page gets no reader.
 //
 // Entries name what happened and never what was read: a poller or stream by its
 // kind and a small instance number, never a post's text, an account or a filter.
 import { readJSON } from '../lib/storage'
+import { buildLine } from './build'
 
 const FLAG = 'blohard.debug.polls'
 /** Enough for several minutes of every poller's checks around a return. Hidden ticks are not recorded. */
@@ -35,7 +36,8 @@ function on(): boolean {
   if (!installed && typeof window !== 'undefined') {
     installed = true
     const page = window as unknown as { blohardPolls: () => string }
-    page.blohardPolls = () => entries.join('\n')
+    // The copy starts with the build and the page's load time, which no entry carries.
+    page.blohardPolls = () => [buildLine(), ...entries].join('\n')
   }
   return true
 }

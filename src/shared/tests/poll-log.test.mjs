@@ -64,6 +64,8 @@ test('the log records nothing and adds nothing to the page until it is switched 
   const since = mark()
   fired.tick(); await flush()
   assert.deepEqual(since(), ['visible check started poller=home trigger=interval'])
+  // The copy starts with the build and the page's load time. A unit test runs outside a build.
+  assert.match(globalThis.window.blohardPolls().split('\n')[0], /^build unknown, page loaded \d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/)
   // Switching it off stops recording at once; the console reader keeps what it has.
   stored.delete(FLAG)
   fired.tick(); await flush()
