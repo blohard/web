@@ -35,7 +35,9 @@
   $effect(() => {
     void refreshRevision
     void retry
-    if (account && market) return view.watch()
+    // The watch reads one page of balances, so it starts over when the reader pages.
+    void view.key
+    if (account && market) return untrack(() => view.watch())
   })
   $effect(() => refreshCue.cueChanges(() => view.changed))
   const page = $derived(view.shown)

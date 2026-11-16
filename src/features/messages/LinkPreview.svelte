@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte'
+  import { untrack, type Snippet } from 'svelte'
   import Loading from '../../shared/Loading.svelte'
   import { Resource } from '../../shared/resource.svelte'
   import { PreviewQueueFull, linkPreviews, type PreviewLink, type PreviewPost } from './link-preview'
@@ -16,7 +16,11 @@
   const value = $derived(metadata.value(url))
   let retry = $state(0)
   const busy = $derived(metadata.failure(url)?.cause instanceof PreviewQueueFull)
-  $effect(() => { void retry; return metadata.watch(linkPreviews.read(link, post), url) })
+  $effect(() => {
+    void retry
+    const shown = link, from = post, key = url
+    return untrack(() => metadata.watch(linkPreviews.read(shown, from), key))
+  })
 </script>
 
 {#if value}

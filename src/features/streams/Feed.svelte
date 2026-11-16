@@ -42,9 +42,11 @@
   })
   $effect(() => {
     const current = activity, changed = onactivitychange
-    if (!current) { changed?.(false); return }
-    const stop = pollVisible(() => current.keys.peek(), value => changed?.(current.keys.changed(value)), () => {}, 30_000, false)
-    return () => { stop(); changed?.(false) }
+    return untrack(() => {
+      if (!current) { changed?.(false); return }
+      const stop = pollVisible(() => current.keys.peek(), value => changed?.(current.keys.changed(value)), () => {}, 30_000, false)
+      return () => { stop(); changed?.(false) }
+    })
   })
   function enrich(read: Promise<Page>, refresh: boolean, preserve: boolean, mode?: 'older' | 'resume'): Promise<ActivityPage> {
     const current = activity, revision = current?.keys.revision
@@ -142,7 +144,7 @@
     void reloadRevision
     void inPlaceReloadRevision
     void muted.addresses
-    return pollVisible(() => peekFeed(c, f), () => {}, () => {}, 30_000, true, 'profile')
+    return untrack(() => pollVisible(() => peekFeed(c, f), () => {}, () => {}, 30_000, true, 'profile'))
   })
 
   /**

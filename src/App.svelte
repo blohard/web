@@ -53,7 +53,8 @@
     router.go(href.settings(id))
   }
 
-  $effect(() => {
+  // The host's status and the relay's are read from the app's start, and follow nothing.
+  $effect(() => untrack(() => {
     const stopRelay = readRelay()
     const stopStatus = hostStatus.start((s) => {
       const route = router.route
@@ -66,7 +67,7 @@
       }
     })
     return () => { stopRelay(); stopStatus() }
-  })
+  }))
 
   let status = $derived(host.status)
   let selected = $derived<ChainInfo | null>(status?.chains.find((c) => c.id === selectedId) ?? null)
@@ -97,7 +98,11 @@
   $effect(() => {
     void refreshRevision
     void router.route
-    if (routeChain) return keyControls.watch(routeChain, wallet.account)
+    const c = routeChain, account = wallet.account
+    if (!c) return
+    // The watch reads this chain's key market, so it starts over when the host names another.
+    void host.keyringMarket(c.id)
+    return untrack(() => keyControls.watch(c, account))
   })
 
   let title = $derived.by(() => {

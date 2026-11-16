@@ -2,6 +2,7 @@
   // The left rail: brand and navigation. On narrow screens it becomes a
   // bar above the column, with the navigation and notice behind a menu
   // button. The wallet lives in the column header, top right.
+  import { untrack } from 'svelte'
   import mark from '../../assets/whale-mark.jpg'
   import keyMark from '../../assets/whale-key-mark.jpg'
   import { follows } from '../../lib/follows.svelte'
@@ -40,7 +41,9 @@
   // Shared stream polls plus a slower all-page check keep the favicon current while hidden.
   $effect(() => {
     const me = wallet.account, status = host.status
-    if (me && status) return notificationDot.watch(status.chains, me, status.keyrings)
+    if (!me || !status) return
+    const chains = status.chains, markets = status.keyrings
+    return untrack(() => notificationDot.watch(chains, me, markets))
   })
   let dot = $derived(notificationDot.shown(wallet.account))
   // The tab's icon carries the dot too, in red so it stands out among tabs.

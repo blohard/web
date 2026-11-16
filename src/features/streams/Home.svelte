@@ -174,15 +174,18 @@
   // The quiet poll cues the refresh button with the posts a refresh would add
   // (shared/refresh-cue.svelte.ts); the feed itself never moves until it is pressed.
   $effect(() => {
-    if (effective === 'keyring' && (!wallet.account || !heldAuthors)) return
+    const account = wallet.account
+    if (effective === 'keyring' && (!account || !heldAuthors)) return
     const c = chain
     const f = filter
     void reloadRevision
     void muted.addresses // the feed reloads when it changes, so the count starts over
-    // Its answers also carry the reader's new replies, mentions and quotes to the notifications dot.
-    const listener = wallet.account ? notificationDot.listen(c, wallet.account) : undefined
-    return pollVisible(() => peekFeed(c, f, listener), () => {},
-      () => { /* A later poll retries; keep the last cue. */ }, 30_000, true, 'home')
+    return untrack(() => {
+      // Its answers also carry the reader's new replies, mentions and quotes to the notifications dot.
+      const listener = account ? notificationDot.listen(c, account) : undefined
+      return pollVisible(() => peekFeed(c, f, listener), () => {},
+        () => { /* A later poll retries; keep the last cue. */ }, 30_000, true, 'home')
+    })
   })
 </script>
 

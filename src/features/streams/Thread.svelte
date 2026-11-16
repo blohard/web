@@ -138,12 +138,15 @@
   $effect(() => {
     const c = chain
     const p = page
-    // Its answers also carry the reader's new replies, mentions and quotes to the notifications dot.
-    const listener = wallet.account ? notificationDot.listen(c, wallet.account) : undefined
-    return refreshCue.poll(async () => {
-      const loaded = await p.catch(() => null)
-      return loaded ? peekReplies(c, loaded.replies, shown, listener) : null
-    }, 'thread')
+    const account = wallet.account
+    return untrack(() => {
+      // Its answers also carry the reader's new replies, mentions and quotes to the notifications dot.
+      const listener = account ? notificationDot.listen(c, account) : undefined
+      return refreshCue.poll(async () => {
+        const loaded = await p.catch(() => null)
+        return loaded ? peekReplies(c, loaded.replies, shown, listener) : null
+      }, 'thread')
+    })
   })
 </script>
 

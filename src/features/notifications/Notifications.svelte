@@ -43,9 +43,11 @@
   // Only explicit refreshes reset the trade cursor; loading older rows keeps the same head.
   const refreshToken = $derived.by(() => { void refreshRevision; return {} })
   $effect(() => {
-    const keys = activity?.keys
-    const stops = (keys ?? []).map(key => pollVisible(() => key.peek(), head => key.observe(head), () => {}, 30_000, false))
-    return () => stops.forEach(stop => stop())
+    const keys = activity?.keys ?? []
+    return untrack(() => {
+      const stops = keys.map(key => pollVisible(() => key.peek(), head => key.observe(head), () => {}, 30_000, false))
+      return () => stops.forEach(stop => stop())
+    })
   })
   $effect(() => refreshCue.cueChanges(() => activity?.keys.some(key => key.changed) ?? false))
   let again = $state(0)

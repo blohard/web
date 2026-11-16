@@ -39,6 +39,14 @@ subscribe to requests/events; they do not copy and reset the state they observe.
 The pending-upload list uses the same rule: `Resource` owns its displayed list,
 while each publication owns its retries and remains alive after the list unmounts.
 
+An effect follows everything read while it runs, including reads inside the
+functions it calls. So an effect that opens a poller, registers a listener or
+starts a background check reads its inputs on its first lines and registers
+inside `untrack`; otherwise a helper's incidental read can restart it.
+`pollVisible` runs its first check untracked for the same reason. The one-line
+`resource.watch(request, identity)` form needs no wrapper, because
+`Resource.watch` reads no state.
+
 `SerialQueue` orders feed looks, reference reads, thread-root reads and reads of
 each reply branch. Each operation gets its own result, and a failure does not
 prevent the next queued operation. Feed looks return rows immediately but hold
