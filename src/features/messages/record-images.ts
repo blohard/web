@@ -236,8 +236,8 @@ function imageToggle(el: HTMLElement, hash: Hex, anchor: Anchor | undefined, ope
 /**
  * A picture over the whole screen: fitted to the viewport first, and at its
  * natural size, scrollable, after one more click, for reading small text. A
- * click beside the picture or Escape closes it and returns focus to the
- * picture in the post.
+ * click beside the picture, Escape, or leaving the post closes the viewer.
+ * Focus returns to the inline picture if it is still mounted.
  */
 function openLightbox(blob: Blob, alt: string, from: HTMLElement, signal: AbortSignal) {
   if (signal.aborted) return

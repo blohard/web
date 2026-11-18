@@ -1,8 +1,5 @@
-// A page that sits idle keeps what it registered. While the host's answers do
-// not change, no poller closes and opens again and no stream mounts again, on
-// pages resumed with Back as well as fresh ones. An effect that follows state
-// it never meant to follow shows up here as a registration repeating on every
-// poll, with nothing else visibly wrong.
+// A page resumed with Back keeps its pollers and stream mounted as policy
+// updates arrive while the reader is idle.
 import { test, expect, author, card } from './host.mjs'
 
 const REGISTRATION = / (poller (opened|closed) poller=|stream (mounted|unmounted) view=)/
@@ -78,7 +75,16 @@ for (const { name, registered, resume } of pages) test(`${name} resumed with Bac
   const before = await log.read()
   expect(open(before), 'what the resumed page registered').toEqual(registered)
 
-  // Two minutes of unchanged answers, with one return to the window on the way.
+  // Each poll advances only the declaration counter. The page adopts new policy
+  // while the same posts, admin lists and stream selection stay in view.
+  let policyPolls = 0
+  await page.route('**/api/host-policy', async route => {
+    const policy = await (await host.answer(route.request())).json()
+    const declarations = String(BigInt(policy.declarations) + BigInt(++policyPolls))
+    await route.fulfill({ json: { ...policy, declarations } })
+  })
+
+  // Two minutes of polling, with one return to the window on the way.
   for (let step = 0; step < 4; step++) {
     if (step === 2) await page.evaluate(() => {
       window.dispatchEvent(new Event('blur'))
@@ -88,6 +94,7 @@ for (const { name, registered, resume } of pages) test(`${name} resumed with Bac
     await log.read()
   }
   const after = await log.read()
+  expect(policyPolls).toBeGreaterThan(1)
   expect(after.filter(entry => !before.includes(entry)), 'registrations made while idle').toEqual([])
   // The page did check in that time: an idle page that stopped polling would pass the line above too.
   expect(await page.evaluate(() => window.blohardPolls())).toContain('trigger=interval')
