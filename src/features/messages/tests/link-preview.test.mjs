@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test, after, beforeEach } from 'node:test'
 import { install, load, renderComponent, teardown, deferred } from '../../../../scripts/harness.mjs'
-const { previewLink: selectLink, previewPost, hostPreviewLink, checkedPreview, LinkPreviews, PreviewQueueFull } = await load('features/messages/link-preview.ts')
+const { previewSegments, previewLink: firstLink, previewPost: firstPost, hostPreviewLink: hostLink, checkedPreview, LinkPreviews, PreviewQueueFull } = await load('features/messages/link-preview.ts')
 const { pageHead, siteMetadata } = await load('features/messages/site-preview.ts')
 const { host } = await load('lib/host.svelte.ts')
 const { Resource } = await load('shared/resource.svelte.ts')
@@ -9,6 +9,9 @@ const { follows } = await load('lib/follows.svelte.ts')
 const { wallet } = await load('lib/wallet.svelte.ts')
 beforeEach(install)
 after(teardown)
+const selectLink = (text, cap, origin) => firstLink(previewSegments(text, cap), origin)
+const previewPost = (text, cap, origin) => firstPost(previewSegments(text, cap), origin)
+const hostPreviewLink = text => hostLink(previewSegments(text, host.status?.store?.attachments?.max_per_message))
 const previewLink = (...args) => selectLink(...args)?.url ?? null
 const link = url => ({ url, source: url })
 const post = { chain: 84532, id: 123n }

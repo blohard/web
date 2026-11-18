@@ -2,7 +2,7 @@ import { host } from '../../lib/host.svelte'
 import { localPreviewPath, siteMetadata } from './site-preview'
 import { parseLocation } from '../navigation/router.svelte'
 import type { Quote } from '../../lib/reference-syntax'
-import { messageText, previewLimit } from './message-text'
+import { messageText, previewLimit, type TextSegment } from './message-text'
 import { responseJson, retryAfter } from '../../shared/response-json'
 import { sharedRead } from '../../shared/shared-read'
 import { SerialQueue } from '../../shared/serial-queue'
@@ -12,15 +12,14 @@ export type PreviewPost = { chain: number; id: bigint }
 export type LinkMetadata = { title: string; description: string; image: string | null }
 
 /** Explicit quotes take priority; automatic cards share the picture budget. */
-function previewSegments(text: string, maxAttachments: number) {
+export function previewSegments(text: string, maxAttachments = 4) {
   const segments = messageText(text, { quotes: true, maxAttachments })
   return segments.some(s => s.kind === 'quote')
     || segments.filter(s => s.kind === 'record' && s.image).length >= previewLimit(maxAttachments) ? [] : segments
 }
 
 /** One link card, after the existing picture and quote budget. Never displace either. */
-export function previewLink(text: string, maxAttachments = 4, origin = globalThis.location?.origin): PreviewLink | null {
-  const segments = previewSegments(text, maxAttachments)
+export function previewLink(segments: TextSegment[], origin = globalThis.location?.origin): PreviewLink | null {
   for (const segment of segments) {
     if (segment.kind !== 'link') continue
     const url = new URL(segment.href)
@@ -39,8 +38,8 @@ export function previewLink(text: string, maxAttachments = 4, origin = globalThi
 type PostLink = Omit<Quote, 'commit'> & { commit?: Quote['commit'] }
 
 /** Same-site post links use the router's validation, including commitment pins. */
-export function previewPost(text: string, maxAttachments = 4, origin = globalThis.location?.origin): PostLink | null {
-  for (const segment of previewSegments(text, maxAttachments)) {
+export function previewPost(segments: TextSegment[], origin = globalThis.location?.origin): PostLink | null {
+  for (const segment of segments) {
     if (segment.kind !== 'link') continue
     const url = new URL(segment.href)
     if (url.href.length > 2048 || (url.origin !== origin && (url.hostname !== 'blohard.social' || url.port))) continue
@@ -50,10 +49,10 @@ export function previewPost(text: string, maxAttachments = 4, origin = globalThi
   return null
 }
 
-/** Same-site pages need no outbound preview service; both kinds use the host's attachment cap. */
-export function hostPreviewLink(text: string): PreviewLink | null {
+/** Same-site pages need no outbound preview service; external previews need the host's service. */
+export function hostPreviewLink(segments: TextSegment[]): PreviewLink | null {
   const status = host.status
-  const link = previewLink(text, status?.store?.attachments?.max_per_message ?? 4)
+  const link = previewLink(segments)
   return link?.localPath || status?.gateway?.link_previews ? link : null
 }
 

@@ -2,15 +2,16 @@
   import type { Address } from 'viem'
   import type { ChainInfo } from '../../lib/types'
   import { host } from '../../lib/host.svelte'
-  import { hostPreviewLink, previewPost } from './link-preview'
+  import { hostPreviewLink, previewPost, previewSegments } from './link-preview'
   import LinkPreview from './LinkPreview.svelte'
   import QuoteCard from './QuoteCard.svelte'
 
   let { text, chain, author, id, reloadKey, preview = false }: {
     text: string; chain: ChainInfo; author: Address; id?: bigint; reloadKey?: unknown; preview?: boolean
   } = $props()
-  const link = $derived(hostPreviewLink(text))
-  const quoted = $derived(previewPost(text, host.status?.store?.attachments?.max_per_message ?? 4))
+  const segments = $derived(previewSegments(text, host.status?.store?.attachments?.max_per_message ?? 4))
+  const link = $derived(hostPreviewLink(segments))
+  const quoted = $derived(previewPost(segments))
 </script>
 
 {#snippet fallback()}
