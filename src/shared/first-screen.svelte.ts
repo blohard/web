@@ -10,10 +10,14 @@ const SCREEN = Symbol('first screen'), ROW = Symbol('first screen row'), DISPLAY
 type Row = { screen: FirstScreen; reads: Set<() => boolean> }
 
 /** Rows are in reading order. Only a settled prefix can cover the first screen. */
-export function screenReady(rows: { settled: boolean; bottom: number }[], height: number): boolean {
-  for (const row of rows) {
-    if (!row.settled) return false
-    if (row.bottom >= height * 1.5) return true
+export function screenReady(rows: [HTMLElement, () => boolean][], height: number, collapsed = false): boolean {
+  let bottom: number | undefined
+  for (const [node, ready] of rows) {
+    if (!ready()) return false
+    const rect = node.getBoundingClientRect()
+    // Staged cards keep their heights inside collapsed wrappers.
+    bottom = collapsed ? (bottom ?? rect.top) + rect.height : rect.bottom
+    if (bottom >= height * 1.5) return true
   }
   return true
 }
@@ -71,15 +75,7 @@ export class FirstScreen {
       this.queued = false
       if (!this.waiting || !this.mounted) return
       const rows = [...this.rows].sort(([a], [b]) => a.compareDocumentPosition(b) & 2 ? 1 : -1)
-      let bottom = rows[0]?.[0].getBoundingClientRect().top ?? 0
-      const measured = rows.map(([node, ready]) => {
-        const rect = node.getBoundingClientRect()
-        // The cards retain their normal dimensions inside zero-height wrappers.
-        // Their eventual positions are the sum of those heights, in DOM order.
-        bottom = this.collapsed ? bottom + rect.height : rect.bottom
-        return { settled: ready(), bottom }
-      })
-      if (screenReady(measured, window.innerHeight)) this.finish()
+      if (screenReady(rows, window.innerHeight, this.collapsed)) this.finish()
     })
   }
 }

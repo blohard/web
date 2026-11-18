@@ -6,7 +6,7 @@ const { FirstScreen, screenReady } = await load('shared/first-screen.svelte.ts')
 after(teardown)
 const settle = () => new Promise(resolve => setImmediate(resolve))
 
-const row = (settled, bottom) => ({ settled, bottom })
+const row = (settled, bottom) => [node(0, bottom), () => settled]
 test('only a settled prefix covers the viewport and its buffer', () => {
   assert.equal(screenReady([row(true, 1200), row(false, 1300)], 800), true)
   assert.equal(screenReady([row(false, 200), row(true, 1400)], 800), false)
@@ -107,4 +107,25 @@ test('staged paging rows measure their combined height while taking no layout sp
   screen.start(); screen.mount()
   await settle()
   assert.equal(screen.waiting, false, 'the first two settled rows cover the viewport and its buffer')
+})
+
+test('an unsettled row or covered viewport stops further geometry reads', async t => {
+  const { screen } = environment(t)
+  let ready = false
+  const measured = []
+  for (let i = 0; i < 20; i++) {
+    screen.row({ ...node(i, 0), getBoundingClientRect() {
+      measured.push(i)
+      return { top: i * 600, bottom: (i + 1) * 600, height: 600 }
+    } }, () => i > 0 || ready)
+  }
+  screen.mount()
+  await settle()
+  assert.equal(screen.waiting, true)
+  assert.deepEqual(measured, [])
+  ready = true
+  screen.changed()
+  await settle()
+  assert.equal(screen.waiting, false)
+  assert.deepEqual(measured, [0, 1])
 })
