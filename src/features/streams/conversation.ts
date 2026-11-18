@@ -70,7 +70,11 @@ export function withInlined(
 ): { posts: Posted[]; chains: Map<bigint, Posted[]>; groups: Groups; activity: Map<bigint, Posted> } {
   const { roots, chains } = chainsOf(replies)
   const byParent = new Map<bigint, Posted[]>()
-  for (const r of roots) byParent.set(r.parentId, [...(byParent.get(r.parentId) ?? []), r])
+  for (const r of roots) {
+    const siblings = byParent.get(r.parentId)
+    if (siblings) siblings.push(r)
+    else byParent.set(r.parentId, [r])
+  }
   const groups: Groups = new Map()
   const leads: Posted[] = []
   for (const siblings of byParent.values()) {

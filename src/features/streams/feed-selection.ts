@@ -46,8 +46,11 @@ export function selectConversations(filter: Filter, records: {
       posts = replies.filter((r) => sameAddress(r.author, filter.address))
       for (const r of replies) {
         if (sameAddress(r.author, filter.address)) continue
-        chains.set(r.parentId, [...(chains.get(r.parentId) ?? []), r].sort(oldestFirst))
+        const siblings = chains.get(r.parentId)
+        if (siblings) siblings.push(r)
+        else chains.set(r.parentId, [r])
       }
+      for (const siblings of chains.values()) siblings.sort(oldestFirst)
       break
     }
   }
