@@ -59,3 +59,28 @@ for (const touch of [false, true]) test.describe(touch ? 'touch media controls' 
     }
   })
 })
+
+test('a full-size picture closes with Escape and when Back leaves its post', async ({ page, host }) => {
+  const image = await page.evaluate(() => document.createElement('canvas').toDataURL('image/png').split(',')[1])
+  const hash = host.record(Buffer.concat([Buffer.from('version/1 image/png\n'), Buffer.from(image, 'base64')]))
+  host.post(1, `A picture\n![landscape](record:${hash})`)
+  await page.goto('/')
+  await card(page, 1).getByRole('link', { name: 'open post #1', exact: true }).click()
+  await expect(page).toHaveURL(/\/p\/84532\/1$/)
+
+  const picture = card(page, 1).locator('img.zoomable')
+  const viewer = page.getByRole('dialog', { name: 'landscape' })
+  await picture.click()
+  await expect(viewer).toBeVisible()
+  await viewer.getByRole('img').click()
+  await expect(viewer).toHaveClass(/natural/)
+  await page.keyboard.press('Escape')
+  await expect(viewer).toHaveCount(0)
+  await expect(picture).toBeFocused()
+
+  await picture.press('Enter')
+  await expect(viewer).toBeVisible()
+  await page.goBack()
+  await expect(page).toHaveURL(/\/$/)
+  await expect(viewer).toHaveCount(0)
+})

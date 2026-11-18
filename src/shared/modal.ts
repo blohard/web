@@ -1,8 +1,7 @@
 /** Native modal focus handling, with background scrolling restored on dismissal or navigation. */
-export function modal(dialog: HTMLDialogElement, onclose: () => void) {
+export function modal(dialog: HTMLDialogElement, onclose: () => void, from = document.activeElement) {
   const root = document.documentElement
   const overflow = root.style.overflow
-  const from = document.activeElement
   dialog.showModal()
   root.style.overflow = 'hidden'
   return {

@@ -7,6 +7,7 @@ import { fetchContent, type Anchor } from '../../lib/store'
 import { decode, isInlineImage } from '../../lib/envelope'
 import { follows } from '../../lib/follows.svelte'
 import { fmtBytes, shortHex } from '../../lib/format'
+import { modal } from '../../shared/modal'
 import { pictureSlots } from './picture-slots'
 import { wallet } from '../../lib/wallet.svelte'
 
@@ -198,19 +199,18 @@ function imageToggle(el: HTMLElement, hash: Hex, anchor: Anchor | undefined, ope
         button.ariaLabel = 'retry picture'
         settled()
       }
-      const bytes = d.envelope.body.slice()
-      const mediaType = d.envelope.mediaType
-      shown.src = URL.createObjectURL(new Blob([bytes], { type: mediaType }))
+      const blob = new Blob([d.envelope.body.slice()], { type: d.envelope.mediaType })
+      shown.src = URL.createObjectURL(blob)
       shown.alt = alt
       // The inline picture is scaled to fit the column; a click opens it as large as the screen allows.
       shown.className = 'zoomable'
       shown.title = 'open full size'
       shown.tabIndex = 0
-      shown.onclick = () => openLightbox(bytes, mediaType, alt, shown)
+      shown.onclick = () => openLightbox(blob, alt, shown, signal)
       shown.onkeydown = (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          openLightbox(bytes, mediaType, alt, shown)
+          openLightbox(blob, alt, shown, signal)
         }
       }
       frame.replaceChildren(shown)
@@ -239,32 +239,29 @@ function imageToggle(el: HTMLElement, hash: Hex, anchor: Anchor | undefined, ope
  * click beside the picture or Escape closes it and returns focus to the
  * picture in the post.
  */
-function openLightbox(bytes: Uint8Array<ArrayBuffer>, mediaType: string, alt: string, from: HTMLElement) {
-  const overlay = document.createElement('div')
+function openLightbox(blob: Blob, alt: string, from: HTMLElement, signal: AbortSignal) {
+  if (signal.aborted) return
+  const overlay = document.createElement('dialog')
   overlay.className = 'lightbox'
-  overlay.setAttribute('role', 'dialog')
   overlay.setAttribute('aria-label', alt || 'image')
   const big = document.createElement('img')
-  big.src = URL.createObjectURL(new Blob([bytes], { type: mediaType }))
+  big.src = URL.createObjectURL(blob)
   big.alt = alt
   big.title = 'click for actual size'
   overlay.append(big)
-  const close = () => {
-    document.removeEventListener('keydown', onKey)
-    URL.revokeObjectURL(big.src)
-    overlay.remove()
-    from.focus()
-  }
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') close()
-  }
   big.onclick = (e) => {
     e.stopPropagation()
     const natural = overlay.classList.toggle('natural')
     big.title = natural ? 'click to fit the screen' : 'click for actual size'
   }
-  overlay.onclick = close
-  document.addEventListener('keydown', onKey)
+  overlay.onclick = () => overlay.close()
   document.body.append(overlay)
-  big.focus()
+  const { destroy } = modal(overlay, () => {
+    overlay.onclose = null
+    signal.removeEventListener('abort', destroy)
+    URL.revokeObjectURL(big.src)
+    overlay.remove()
+  }, from)
+  overlay.onclose = destroy
+  signal.addEventListener('abort', destroy, { once: true })
 }
