@@ -1,11 +1,13 @@
 <script lang="ts">
   import { untrack, type Snippet } from 'svelte'
+  import { inPostList } from '../../shared/post-list.svelte'
   import Loading from '../../shared/Loading.svelte'
   import { Resource } from '../../shared/resource.svelte'
   import { PreviewQueueFull, linkPreviews, type PreviewLink, type PreviewPost } from './link-preview'
   import { opensPictures } from './record-images'
 
   let { link, post, author, fallback }: { link: PreviewLink; post?: PreviewPost; author: string; fallback?: Snippet } = $props()
+  const listed = inPostList()
   const url = $derived(link.url)
   const metadata = new Resource<Awaited<ReturnType<typeof linkPreviews.read>>>()
   const domain = $derived(new URL(url).hostname)
@@ -38,7 +40,7 @@
             <span class="small dim">image unavailable</span>
           {:else}
             <!-- Under the image, which covers it as it arrives. -->
-            {#if !loadedImage}<div class="image-wait"><Loading label="loading image…" /></div>{/if}
+            {#if !loadedImage && (!listed || chosen === true)}<div class="image-wait"><Loading label="loading image…" /></div>{/if}
             <a href={url} target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">
               <img src={value.image} alt="" loading="lazy" referrerpolicy="no-referrer" onload={() => { loadedImage = true }} onerror={() => { failedImage = true }} />
             </a>

@@ -119,51 +119,102 @@ for (const width of [1100, 390]) test.describe(`layout at ${width}px`, () => {
     expectStable(await finish(), [1, 2])
   })
 
-  test('Home reload shows one spinner below the ready posts as bodies arrive out of order', async ({ page, host }) => {
-    const posts = Array.from({ length: 10 }, (_, i) => host.post(i + 1, `Post ${i + 1}\n`.repeat(6)))
-    await page.goto('/')
-    await expect(card(page, 1)).toBeVisible()
+  for (const view of ['Home reload', 'profile Posts reload', 'profile Posts paging']) {
+    test(`${view} shows one spinner below the ready posts as bodies arrive out of order`, async ({ page, host }) => {
+      const paging = view === 'profile Posts paging'
+      const posts = Array.from({ length: paging ? 25 : 10 }, (_, i) => host.post(i + 1, `Post ${i + 1}\n`.repeat(6)))
+      await page.goto(view === 'Home reload' ? '/' : `/u/84532/${author}`)
+      await expect(card(page, paging ? 6 : 1)).toBeVisible()
 
-    const release = deferred(), fail = deferred()
-    await page.route(`**/api/content/${posts[3].content_hash}*`, async route => {
-      await release.promise
-      await route.fallback()
+      const release = deferred(), fail = deferred()
+      await page.route(`**/api/content/${posts[3].content_hash}*`, async route => {
+        await release.promise
+        await route.fallback()
+      })
+      await page.route(`**/api/content/${posts[1].content_hash}*`, async route => {
+        await fail.promise
+        await route.fulfill({ status: 404 })
+      })
+      try {
+        const lastRead = page.waitForResponse(response => response.url().includes(posts[0].content_hash))
+        if (paging) await page.getByRole('button', { name: '[ show more posts ]', exact: true }).click()
+        else await page.reload()
+        await lastRead
+        const spinner = page.locator('.stream-start .spinner:visible')
+        await expect(card(page, 5)).toBeVisible()
+        await expect(spinner).toHaveCount(1)
+        await expect(card(page, 3)).toBeHidden()
+        await expect(card(page, 1)).toBeHidden()
+        // Scroll to the stationary status element around the rotating spinner.
+        await page.locator('.stream-start .loading:visible').scrollIntoViewIfNeeded()
+        expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+        const finish = await watchLayout(page, [5, 4, 3, 2, 1])
+        const after = async id => {
+          const row = await card(page, id).boundingBox()
+          expect((await spinner.boundingBox()).y).toBeGreaterThanOrEqual(row.y + row.height - 1)
+        }
+        await after(5)
+
+        release.resolve()
+        await expect(card(page, 3)).toBeVisible()
+        await expect(spinner).toHaveCount(1)
+        await expect(card(page, 1)).toBeHidden()
+        await after(3)
+
+        fail.resolve()
+        await expect(card(page, 2)).toBeVisible()
+        await expect(card(page, 1)).toBeVisible()
+        await expect(spinner).toHaveCount(0)
+        expectStable(await finish(), [5, 4, 3, 2, 1])
+      } finally { release.resolve(); fail.resolve() }
     })
-    await page.route(`**/api/content/${posts[1].content_hash}*`, async route => {
-      await fail.promise
-      await route.fulfill({ status: 404 })
-    })
-    try {
-      const lastRead = page.waitForResponse(response => response.url().includes(posts[0].content_hash))
-      await page.reload()
-      await lastRead
-      const spinner = page.locator('.stream-start .loading:visible')
-      await expect(card(page, 5)).toBeVisible()
-      await expect(spinner).toHaveCount(1)
-      await expect(card(page, 3)).toBeHidden()
-      await expect(card(page, 1)).toBeHidden()
-      await spinner.scrollIntoViewIfNeeded()
-      expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
-      const finish = await watchLayout(page, [5, 4, 3, 2, 1])
-      const after = async id => {
-        const row = await card(page, id).boundingBox()
-        expect((await spinner.boundingBox()).y).toBeGreaterThanOrEqual(row.y + row.height - 1)
+  }
+
+  for (const view of ['profile Replies', 'notifications', 'thread', 'discussion widget']) {
+    test(`${view} shows one pending post and keeps later posts in order`, async ({ page, host }) => {
+      const thread = view === 'thread' || view === 'discussion widget'
+      const profile = view === 'profile Replies'
+      const ids = [10, 11, 12, 13]
+      const order = thread ? ids : [...ids].reverse()
+      host.post(1, 'Conversation root')
+      const posts = new Map()
+      if (profile) for (const id of ids) host.post(id - 8, `Parent ${id}`, { who: stranger })
+      for (const id of ids) {
+        posts.set(id, host.post(id, `Reply ${id}`, { who: profile ? author : stranger, parent: profile ? id - 8 : 1 }))
       }
-      await after(5)
-
-      release.resolve()
-      await expect(card(page, 3)).toBeVisible()
-      await expect(spinner).toHaveCount(1)
-      await expect(card(page, 1)).toBeHidden()
-      await after(3)
-
-      fail.resolve()
-      await expect(card(page, 2)).toBeVisible()
-      await expect(card(page, 1)).toBeVisible()
-      await expect(spinner).toHaveCount(0)
-      expectStable(await finish(), [5, 4, 3, 2, 1])
-    } finally { release.resolve(); fail.resolve() }
-  })
+      if (view === 'notifications') await signIn(page)
+      const path = profile ? `/u/84532/${author}/replies` : view === 'notifications' ? '/#/notifications'
+        : view === 'thread' ? '/p/84532/1' : '/embed.html?chain=84532&post=1'
+      const [first, slow, later, last] = order
+      const waits = [deferred(), deferred()]
+      for (const [index, id] of [slow, later].entries()) {
+        await page.route(`**/api/content/${posts.get(id).content_hash}*`, async route => {
+          await waits[index].promise
+          await route.fallback()
+        })
+      }
+      try {
+        const lastRead = page.waitForResponse(r => r.url().includes(posts.get(last).content_hash))
+        await page.goto(path)
+        await lastRead
+        await expect(card(page, first)).toBeVisible()
+        const spinners = page.locator(':is(.stream-start, .thread-view, .embed) .spinner:visible')
+        await expect(spinners).toHaveCount(1)
+        const before = await card(page, first).boundingBox()
+        expect((await spinners.boundingBox()).y).toBeGreaterThanOrEqual(before.y + before.height - 1)
+        await expect(card(page, last)).toBeHidden()
+        const laterRead = page.waitForResponse(r => r.url().includes(posts.get(later).content_hash))
+        waits[1].resolve()
+        await laterRead
+        await frames(page)
+        await expect(card(page, later)).toBeHidden()
+        await expect(spinners).toHaveCount(1)
+        waits[0].resolve()
+        for (const id of ids) await expect(card(page, id)).toBeVisible()
+        await expect(spinners).toHaveCount(0)
+      } finally { for (const wait of waits) wait.resolve() }
+    })
+  }
 
   test('a quoted post finishes loading before Home reveals the posts below it', async ({ page, host }) => {
     const original = host.post(1, 'Quoted body', { who: stranger })

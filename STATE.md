@@ -111,12 +111,9 @@ needs them. An ended ancestor drawn in a pair is not subtracted from its parent'
 count. Context placeholders have no reply count or expansion control. These rules are
 covered by the replies, feed, paging and notification tests.
 
-Every newly mounted reply list waits for its cards to settle their first reads before
-showing them together, including thread replies, nested branches and the widget.
-The wait ends at most two seconds after the reply page arrives. Ready cards then
-show while unfinished cards keep their own loading and folding checks; a slow
-body or verdict cannot hold up the whole list. Collapsing cancels this deadline.
-When expanding a stream row, a preview already on screen remains until then.
+Reply lists use the same [ordered display](#initial-stream-display) as feeds.
+Opening a branch keeps the existing preview on screen until its replacement is
+ready. A direct link to replies can show them while the parent body loads.
 Standalone "in reply to" labels name the parent's author from the reply record
 (verified name or shortened address) alongside its number. They link to the parent
 thread and have no reply controls. Unknown or host-blocked authors leave just the
@@ -162,8 +159,8 @@ Preview cards and loaded copies share their row's expansion choice and each open
 post's reply session. Moving between them preserves paging and open branches,
 without fetching that page again. A handoff can briefly mount both copies, so the
 refresh cue unregisters the list only when its last copy leaves.
-The expanded list mounts out of layout meanwhile, using the same display-readiness
-reports as the first screen.
+While the preview is visible, the replacement list mounts out of layout and
+waits for its cards to finish their first reads.
 A failed list read keeps any existing preview and shows a retry control; collapsing cancels
 the handoff. Once shown, the branch keeps its usual refresh and paging behaviour.
 
@@ -298,39 +295,28 @@ reload. Inline replies and background recovery are unchanged.
 
 ## Initial stream display
 
-On a fresh Home stream, including a browser reload, rows start their reads in
-parallel and appear in order. One centred spinner marks the first conversation
-still loading, including any posts quoted inside it. Later rows stay mounted,
-invisible and inert until their turn.
-An unavailable body shows its usual notice and the next ready rows can appear.
-Streams and notifications show their spinner only after 300 ms from opening
-the view. One delay covers the page read and card preparation. The profile keys tab
-shares its delay across loading the code and reading the account, and the home
-keyring tab across reading the keyring and its stream. A stream row's reply count
-keeps one delay from reading the thread through its first list preparing. `loadingDelay`
-also serves reply and paging indicators; changing or leaving an operation cancels
-its timer, and returning to the same view starts a fresh delay. These page spinners
-remain overlays, so appearing cannot move content.
-Each conversation reports its parent lookup, any open branch's first page, and displayed cards:
-body, parent excerpt and first reply verdict must settle, with failures counting as settled and
-collapsed cards needing no body. Fresh profile streams and notifications reveal once a
-consecutive settled prefix reaches half a viewport beyond the screen, all rows
-settle, or two seconds pass from the feed page arriving. The reveal observes existing
-reads; it owns no content, verdict cache or extra requests. Automatically opened
-record pictures also wait for decoding or failure, so their
-natural proportions and clipping controls settle before reveal. Names and link
-thumbnails do not hold it up; existing consent and folding rules still apply.
+Home streams, profile Posts and Replies, notifications, threads and the
+discussion widget start their post reads in parallel. Each list reveals ready
+rows in reading order. A conversation row includes its visible preview cards.
+One indicator marks the first unfinished row on the page. Later rows stay
+mounted, invisible and inert until their turn. An unavailable body shows its
+usual notice and lets the next ready rows appear.
 
-Back and tab returns use the same bounded wait while restoring their saved
-position, so reply checks finish before the stream appears. Refresh retains
-the visible stream. Paging leaves the existing rows and control in place and shows
-its spinner after 300 ms. New rows mount once in zero-height, invisible, inert
-wrappers; their child cards retain measurable dimensions. The same first-screen
-check adds those heights in reading order, then reveals the new rows together,
-with the same two-second budget. A retired load cannot delay its replacement.
-The timeout uses no animation frame or resize observer; background browser
-throttling can still delay timers. Slow reads or image decoding can finish after
-the bounded wait; later name, quote and clipping updates can still change layout.
+A row observes the reads its cards already make for the body, parent context,
+quote, reply verdict and automatically opened pictures. Pictures settle after
+decoding or failure. Folded posts need no body. Names and link thumbnails can
+arrive later. The reader's picture settings still apply.
+
+Visible rows stay mounted during refresh and paging. Explicitly opening a reply
+branch lets it load independently while another list is waiting. The existing
+preview stays visible during the handoff. Back and tab returns restore their
+saved positions through the navigation helpers.
+
+Stream and notification indicators wait 300 ms across the page read and card
+preparation. The Home keyring also shares its delay with the preceding keyring
+read. A reply button can carry the indicator when it opens a branch. Paging
+keeps the button mounted while the request runs. Once the page arrives, the
+first unfinished row carries the indicator.
 
 ## Recent body and keyring reads
 

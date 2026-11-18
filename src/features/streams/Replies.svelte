@@ -10,11 +10,12 @@
   import { endingOf } from '../../lib/board'
   import { gates } from '../../lib/gates.svelte'
   import { onDestroy, tick, untrack, type Snippet } from 'svelte'
-  import { firstDisplay, firstDisplayGroup, FIRST_DISPLAY_WAIT_MS } from '../../shared/first-screen.svelte'
+  import { firstDisplay, firstDisplayGroup, postList, startRowGroup } from '../../shared/post-list.svelte'
   import { Resource } from '../../shared/resource.svelte'
   import { replying } from '../publishing/replying.svelte'
   import InlineReply from '../publishing/InlineReply.svelte'
   import Replies from './Replies.svelte'
+  import PostListRow from '../../shared/PostListRow.svelte'
   import ReplyLoading from './ReplyLoading.svelte'
   import StreamBranch from './StreamBranch.svelte'
   import StreamReply from './StreamReply.svelte'
@@ -29,6 +30,7 @@
     parentId,
     depth = 0,
     separator = true,
+    direct = false,
     data,
     reloadKey,
     gateRefreshReady,
@@ -47,6 +49,8 @@
     kept = [],
     remaining,
   }: {
+    /** A direct link to the replies can show them while the parent body loads. */
+    direct?: boolean
     chain: ChainInfo
     parentId: bigint
     depth?: number
@@ -81,6 +85,8 @@
     remaining?: Snippet<[Posted[], bigint?, boolean?]>
   } = $props()
   const box = untrack(() => replying.box())
+  postList()
+  if (untrack(() => direct || depth > 0)) startRowGroup()
   const displays = firstDisplayGroup()
   let prepared = $state(false)
   function prepare() {
@@ -88,13 +94,6 @@
     prepared = true
     onready?.()
   }
-  // Like the feed, wait at most two seconds after the page arrives. Individual
-  // cards still own their loading and folding checks after the list is revealed.
-  $effect(() => {
-    if (prepared || !pageArrived) return
-    const timer = setTimeout(prepare, FIRST_DISPLAY_WAIT_MS)
-    return () => clearTimeout(timer)
-  })
   $effect(() => {
     if (prepared || !slice || !displays()) return
     let active = true
@@ -145,7 +144,6 @@
   let request = $derived(load(data, requested, reveal, omit, again))
   $effect(() => rows.watch(request, identity))
   let slice = $derived(rows.value(identity))
-  const pageArrived = $derived(slice !== null)
   let error = $derived(rows.failure(identity))
   firstDisplay(() => slice !== null || error !== null)
   let visible = $derived(slice?.list.filter(r => r.id !== omit && !endingOf(gates.message(chain, r.id))) ?? [])
@@ -195,40 +193,47 @@
   onDestroy(saveView)
 </script>
 
-<div class="reply-list" class:preparing={!prepared}>
+{#snippet reading()}<ReplyLoading {onloading} {waited} />{/snippet}
+{#if !error && (!slice || (rowx && !prepared))}
+  <PostListRow pending loading={reading} />
+{/if}
+
+<div class="reply-list" class:preparing={!!rowx && !prepared}>
 {#if slice?.total === 0 && !slice.more && depth === 0}
   <p class="dim small">no replies yet.</p>
 {/if}
 {#if slice}
   {@const children = slice.children}
   {#each visible as r, i (r.id)}
-    {#if r.id === slice.tailStart}
-      <p class="dim small expander">{#if r.id === reveal}your new reply is below. {/if}use “show more” to read the replies in between.</p>
-    {/if}
     {@const n = children.counts.get(r.id) ?? 0}
     {@const isOpen = n > 0 && !endingOf(gates.message(chain, r.id)) && (rowx ? rowx.isOpen(r.id) : open[r.id.toString()] === true)}
-    {#if rowx && remaining}
-      <StreamReply {chain} msg={r} total={n} {rowx} {gateRefreshReady} reloadKey={cardReloadKey}
-        separator={separator || i > 0 || r.id === slice.tailStart} kept={adjacent === r.id ? kept : []}
-        expanded={isOpen} loading={loadingBranches[r.id.toString()] === true} interrupted={box.visible(chain, r.id)}
-        {remaining} {onchanged} />
-    {:else}
-    <!-- Each reply has a short thread-line stub; siblings answer the same parent, not each other, so no line joins them. -->
-    <div data-thread-card={r.id}>
-    <MessageCard separator={separator || i > 0 || r.id === slice.tailStart} {gateRefreshReady} reloadKey={cardReloadKey}
-      {chain}
-      msg={r}
-      replyCount={n}
-      expanded={isOpen}
-      repliesLoading={loadingBranches[r.id.toString()] === true}
-      onexpand={() => toggle(r)}
-      continuesAbove={true}
-      connector={isOpen}
-      {onchanged}
-    />
-    </div>
-    <InlineReply {chain} id={r.id} onposted={(replyId) => landed(r, replyId)} />
-    {/if}
+    <PostListRow loading={i === 0 && onloading ? reading : undefined}>
+      {#if r.id === slice.tailStart}
+        <p class="dim small expander">{#if r.id === reveal}your new reply is below. {/if}use “show more” to read the replies in between.</p>
+      {/if}
+      {#if rowx && remaining}
+        <StreamReply {chain} msg={r} total={n} {rowx} {gateRefreshReady} reloadKey={cardReloadKey}
+          separator={separator || i > 0 || r.id === slice.tailStart} kept={adjacent === r.id ? kept : []}
+          expanded={isOpen} loading={loadingBranches[r.id.toString()] === true} interrupted={box.visible(chain, r.id)}
+          {remaining} {onchanged} />
+      {:else}
+      <!-- Each reply has a short thread-line stub; siblings answer the same parent, not each other, so no line joins them. -->
+      <div data-thread-card={r.id}>
+      <MessageCard separator={separator || i > 0 || r.id === slice.tailStart} {gateRefreshReady} reloadKey={cardReloadKey}
+        {chain}
+        msg={r}
+        replyCount={n}
+        expanded={isOpen}
+        repliesLoading={loadingBranches[r.id.toString()] === true}
+        onexpand={() => toggle(r)}
+        continuesAbove={true}
+        connector={isOpen}
+        {onchanged}
+      />
+      </div>
+      <InlineReply {chain} id={r.id} onposted={(replyId) => landed(r, replyId)} />
+      {/if}
+    </PostListRow>
     {#if isOpen}
       {#if rowx}
         <StreamBranch {rowx} {resume} displayed={displayed && prepared} separator={box.visible(chain, r.id)} {gateRefreshReady} {chain} id={r.id} reloadKey={cardReloadKey}
@@ -246,7 +251,6 @@
   </div>
 {/if}
 </div>
-{#if !error && !prepared}<ReplyLoading {onloading} {waited} />{/if}
 {#if error}<LoadError {error} updating={slice !== null} what="replies" onretry={() => again++} />{/if}
 
 {#if prepared && remaining && adjacent === null}{@render remaining(kept)}{/if}

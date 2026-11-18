@@ -2,7 +2,7 @@
   import ReplyCount from '../streams/ReplyCount.svelte'
   import CardActions from './CardActions.svelte'
   import { messageSelection } from './message-selection.svelte'
-  import { firstDisplay } from '../../shared/first-screen.svelte'
+  import { firstDisplay } from '../../shared/post-list.svelte'
   import { isClosedReplyRule } from '../publishing/reply-rules'
   // One post as a timeline row: avatar, author, time, body, actions. The
   // whole row opens the thread, as a timeline reader expects; the focused

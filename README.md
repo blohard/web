@@ -38,7 +38,7 @@ below that matches the change you want to make.
 | Profiles, following, lists and account settings | [account/Profile.svelte](src/features/account/Profile.svelte), [Settings.svelte](src/features/account/Settings.svelte), [account-actions.svelte.ts](src/features/account/account-actions.svelte.ts) | [State ownership](STATE.md#client-state-and-ownership) |
 | Notifications and the unread dot | [notifications/Notifications.svelte](src/features/notifications/Notifications.svelte), [notifications.ts](src/features/notifications/notifications.ts), [notification-dot.svelte.ts](src/features/notifications/notification-dot.svelte.ts) | [Notifications](STATE.md#notifications) |
 | Embedded discussions on other sites | [embed/Embed.svelte](src/features/embed/Embed.svelte), [embed-discussion.svelte.ts](src/features/embed/embed-discussion.svelte.ts) | [Refresh signals](STATE.md#refresh-signals) |
-| Refresh cue and initial loading | [shared/refresh-cue.svelte.ts](src/shared/refresh-cue.svelte.ts), [first-screen.svelte.ts](src/shared/first-screen.svelte.ts) | [Refresh signals](STATE.md#refresh-signals), [initial display](STATE.md#initial-stream-display) |
+| Refresh cue and initial loading | [shared/refresh-cue.svelte.ts](src/shared/refresh-cue.svelte.ts), [post-list.svelte.ts](src/shared/post-list.svelte.ts) | [Refresh signals](STATE.md#refresh-signals), [initial display](STATE.md#initial-stream-display) |
 
 ## Finding the owner
 
@@ -191,9 +191,8 @@ or matching template text.
 
 Changes to component keys, reply resets, loading visibility or scroll restoration
 need a transition test, not just an assertion about the final screen. Preserve
-unaffected mounted cards when clearing UI choices. Newly mounted streams use
-`FirstScreen` to coordinate their initial display, including cached returns;
-keep scroll restoration owned by the navigation helpers.
+unaffected mounted cards when clearing UI choices. Post lists use `PostList` to reveal ready rows in order, including on cached
+returns. The navigation helpers own scroll restoration.
 
 `tests/ui/layout.spec.mjs` runs at desktop and phone widths. It delays real HTTP
 answers for bodies and reply checks, then uses `layout-watch.mjs` to sample card

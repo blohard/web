@@ -10,6 +10,8 @@
   import Replies from './Replies.svelte'
   import Retained from '../../shared/Retained.svelte'
   import { loadingDelay } from '../../shared/loading-delay.svelte'
+  import { startRowGroup } from '../../shared/post-list.svelte'
+  import PostListRow from '../../shared/PostListRow.svelte'
   import ReplyLoading from './ReplyLoading.svelte'
 
   let { chain, id, reloadKey, resume = false, gateRefreshReady, rowx, preview = [], kept = [], remaining, separator = true, onchanged, onloading, onready, displayed = true }: {
@@ -36,6 +38,7 @@
     displayed?: boolean
   } = $props()
 
+  startRowGroup()
   untrack(() => rowx.retain(preview))
   let ready = $state(false)
   onDestroy(() => onready?.(false))
@@ -54,9 +57,10 @@
   const waited = loadingDelay(() => ready ? null : identity)
 </script>
 
-{#snippet loadingReplies()}<ReplyLoading {onloading} {waited} />{/snippet}
+{#snippet reading()}<ReplyLoading {onloading} {waited} />{/snippet}
+{#snippet loadingReplies()}<PostListRow pending loading={reading} />{/snippet}
 
-<Retained settleFirstScreen {request} {identity} loading={loadingReplies} what="replies" onretry={() => again++}>
+<Retained settleDisplay {request} {identity} loading={loadingReplies} what="replies" onretry={() => again++}>
   {#snippet children(page)}
     <!-- The card above folds it again with its own reply count. -->
     <Replies {kept} {remaining} {rowx} {displayed} resume={opening.resume && reloadKey === opening.key} {separator} onready={() => { ready = true; onready?.(true) }} onvisible={parent => rowx.listShown(parent)} {onloading} {waited} {gateRefreshReady} {chain} parentId={id} data={page.replies} reveal={rowx.reveal(id)} {onchanged} />

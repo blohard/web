@@ -111,7 +111,8 @@ test('a late body from an in-place refresh preserves position after expanding re
     release.resolve()
     await expect(card(page, 22)).toContainText('Additional text')
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
-    expect((await reader.boundingBox()).y).toBeCloseTo(top, 0)
+    // Scroll anchoring rounds to a CSS pixel while card heights can be fractional.
+    expect(Math.abs((await reader.boundingBox()).y - top)).toBeLessThanOrEqual(1)
   } finally { release.resolve() }
 })
 
@@ -353,7 +354,7 @@ for (const total of [21, 25]) test(`ancestor expansion pages ${total - 1} other 
   await expect(page).toHaveURL(new RegExp(`/p/84532/${focus}$`))
 })
 
-for (const view of ['thread', 'stream']) test(`${view} replies stop waiting for a slow body after two seconds`, async ({ page, host }) => {
+for (const view of ['thread', 'stream']) test(`${view} replies keep later cards staged until the slow body settles`, async ({ page, host }) => {
   host.post(1, 'Root post')
   if (view === 'stream') host.post(4, 'Existing reply preview', { parent: 1 })
   const slow = host.post(5, 'Reply whose body is slow', { who: stranger, parent: 1 })
@@ -380,7 +381,7 @@ for (const view of ['thread', 'stream']) test(`${view} replies stop waiting for 
       await card(page, 1).getByRole('button', { name: '2 more replies', exact: true }).click()
     }
     await pageStarted.promise
-    // A slow page read must not use up the cards' settling budget.
+    // A delayed page and then a slow body share the same position in the list.
     await page.clock.runFor(2500)
     releasePage.resolve()
     await bodyStarted.promise
@@ -389,7 +390,7 @@ for (const view of ['thread', 'stream']) test(`${view} replies stop waiting for 
     await page.clock.runFor(1900)
     await expect(ready).not.toBeVisible()
     await page.clock.runFor(150)
-    await expect(ready).toBeVisible()
+    await expect(ready).toBeHidden()
     await expect(page.getByText('Reply whose body is slow', { exact: true })).toHaveCount(0)
     if (view === 'stream') await expect(card(page, 4)).toHaveCount(1)
   } finally { releasePage.resolve(); releaseBody.resolve() }
@@ -398,7 +399,7 @@ for (const view of ['thread', 'stream']) test(`${view} replies stop waiting for 
   await expect(card(page, 6)).toHaveCount(1)
 })
 
-test('the reply reveal deadline does not expose a body awaiting its folding verdict', async ({ page, host }) => {
+test('a pending folding verdict holds later replies in order', async ({ page, host }) => {
   host.chain.blocklist = { registry: host.chain.contract, list: 'blocked' }
   host.post(1, 'Original post')
   host.post(2, 'Reply with two answers', { parent: 1 })
@@ -421,11 +422,12 @@ test('the reply reveal deadline does not expose a body awaiting its folding verd
     const ready = page.locator('article.msg').filter({ has: page.locator('a[aria-label="open post #6"]') })
     await expect(ready).toContainText('Protected answer')
     await page.clock.runFor(2050)
-    await expect(ready).toBeVisible()
+    await expect(ready).toBeHidden()
     await expect(page.getByText('Body that must stay folded', { exact: true })).toHaveCount(0)
   } finally { release.resolve() }
   await expect(card(page, 5)).toHaveClass(/\bcollapsed\b/)
   await expect(card(page, 5)).not.toContainText('Body that must stay folded')
+  await expect(card(page, 6)).toBeVisible()
 })
 
 test('expanding Curated replies preserves the nested preview and other stream rows', async ({ page, host }) => {

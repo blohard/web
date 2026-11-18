@@ -24,10 +24,13 @@
   import MessageCard from '../messages/MessageCard.svelte'
   import Replies from './Replies.svelte'
   import { threadView } from './thread-view'
+  import { postList } from '../../shared/post-list.svelte'
+  import PostListRow from '../../shared/PostListRow.svelte'
   import Retained from '../../shared/Retained.svelte'
 
   let { chain, id, commit, refreshRevision = 0, focusReply = false, focusReplies = false }: { chain: ChainInfo; id: bigint; commit?: Hex; refreshRevision?: number; focusReply?: boolean; focusReplies?: boolean } = $props()
 
+  postList('loading posts…')
   const saved = untrack(() => threadView(chain, id))
   const returning = visitReturning()
   const box = untrack(() => replying.box())
@@ -169,10 +172,12 @@
     {@const expanded = ancestorOpen(a)}
     {@const separated = i > 0 && ancestorShown(context[i - 1])}
     <div data-thread-card={a.id} tabindex="-1" use:revealWhen={{ key: earlierTarget === a.id ? a.id : null }}>
-      <MessageCard separator={i === 0 || separated || box.visible(chain, context[i - 1].id)} {gateRefreshReady} reloadKey={t.replies} {chain} msg={a}
-        replyCount={Math.max(0, (t.replies.counts.get(a.id) ?? 0) - drawn)} moreReplies {expanded}
-        repliesLoading={loadingAncestors[String(a.id)] === true} onexpand={() => toggleAncestor(a)}
-        connector={true} continuesAbove={separated || (i === 0 && before !== 0n)} onchanged={() => localReloadRevision++} />
+      <PostListRow>
+        <MessageCard separator={i === 0 || separated || box.visible(chain, context[i - 1].id)} {gateRefreshReady} reloadKey={t.replies} {chain} msg={a}
+          replyCount={Math.max(0, (t.replies.counts.get(a.id) ?? 0) - drawn)} moreReplies {expanded}
+          repliesLoading={loadingAncestors[String(a.id)] === true} onexpand={() => toggleAncestor(a)}
+          connector={true} continuesAbove={separated || (i === 0 && before !== 0n)} onchanged={() => localReloadRevision++} />
+      </PostListRow>
     </div>
     <!-- A reply to an earlier post is a sibling of what this page shows, so its own thread shows it, with the post above. -->
     <InlineReply {chain} id={a.id} />
@@ -184,19 +189,21 @@
     {/if}
   {/each}
   <div data-thread-card={id} tabindex="-1" use:revealWhen={{ key: !returning && !focusReply && !focusReplies ? id : null, anchor: 'above' }}>
-  <MessageCard {gateRefreshReady} reloadKey={t.replies}
-    {chain}
-    msg={t.root}
-    separator={context.length === 0 || ancestorShown(context[context.length - 1]) || box.visible(chain, context[context.length - 1].id)}
-    linkToThread={false}
-    replyCount={count}
-    {repliesLoading}
-    expanded={repliesOpen && count > 0}
-    onexpand={() => { repliesOpen = !repliesOpen; revealed = null }}
-    connector={repliesOpen && count > 0}
-    continuesAbove={context.length === 0 ? t.root.parentId !== 0n : ancestorShown(context[context.length - 1])}
-    onchanged={() => localReloadRevision++}
-  />
+  <PostListRow>
+    <MessageCard {gateRefreshReady} reloadKey={t.replies}
+      {chain}
+      msg={t.root}
+      separator={context.length === 0 || ancestorShown(context[context.length - 1]) || box.visible(chain, context[context.length - 1].id)}
+      linkToThread={false}
+      replyCount={count}
+      {repliesLoading}
+      expanded={repliesOpen && count > 0}
+      onexpand={() => { repliesOpen = !repliesOpen; revealed = null }}
+      connector={repliesOpen && count > 0}
+      continuesAbove={context.length === 0 ? t.root.parentId !== 0n : ancestorShown(context[context.length - 1])}
+      onchanged={() => localReloadRevision++}
+    />
+  </PostListRow>
   </div>
   {#if !ended && (!t.closed || hasResponseRight(t.root, wallet.account))}
     <InlineReply {chain} id={id} onposted={posted} />
@@ -206,7 +213,7 @@
   {/if}
   {#if repliesOpen}
   <div tabindex="-1" use:revealWhen={{ key: !returning && focusReplies ? id : null }}>
-  <Replies separator={count === 0 || box.visible(chain, id)} onloading={loading => repliesLoading = loading} {gateRefreshReady} {chain} parentId={id} data={t.replies} reveal={revealed ?? undefined} {shown} views={saved.branches} onchanged={() => localReloadRevision++} />
+  <Replies direct={focusReplies} separator={count === 0 || box.visible(chain, id)} onloading={loading => repliesLoading = loading} {gateRefreshReady} {chain} parentId={id} data={t.replies} reveal={revealed ?? undefined} {shown} views={saved.branches} onchanged={() => localReloadRevision++} />
   </div>
   {/if}
   {/snippet}

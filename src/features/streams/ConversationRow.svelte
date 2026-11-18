@@ -6,7 +6,7 @@
   import Name from '../../components/Name.svelte'
   import { host } from '../../lib/host.svelte'
   import { replying } from '../publishing/replying.svelte'
-  import { firstDisplay, firstScreenRow } from '../../shared/first-screen.svelte'
+  import { firstDisplay } from '../../shared/post-list.svelte'
   import { ENDING_LABEL, endingOf } from '../../lib/board'
   import { getMessage } from '../../lib/messages'
   import { gates as ledger } from '../../lib/gates.svelte'
@@ -47,7 +47,6 @@
     rowx: RowExpansion
     onchanged?: () => void
   } = $props()
-  const initialRow = firstScreenRow()
   const box = untrack(() => replying.box())
   /** The opened list takes over direct preview replies once it is ready. */
   let repliesLoading = $state(false)
@@ -198,7 +197,7 @@
   {/if}
 {/snippet}
 
-<div class="pair" use:initialRow>
+<div class="pair">
   {#if row.root.omitted}
     <!-- A grouping ancestor needs a header only for its direct preview or an explicit expansion choice. -->
     {#if rootPreviewJoins || expanded || hidden}

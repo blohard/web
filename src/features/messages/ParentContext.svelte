@@ -13,7 +13,7 @@
   import Name from '../../components/Name.svelte'
   import BotMark from '../../components/BotMark.svelte'
   import { Resource } from '../../shared/resource.svelte'
-  import { firstDisplay } from '../../shared/first-screen.svelte'
+  import { firstDisplay } from '../../shared/post-list.svelte'
 
   let { chain, parentId, reloadKey }: { chain: ChainInfo; parentId: bigint; reloadKey?: unknown } = $props()
 

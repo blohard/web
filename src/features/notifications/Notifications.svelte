@@ -15,9 +15,9 @@
   import type { ChainInfo } from '../../lib/types'
   import { wallet } from '../../lib/wallet.svelte'
   import ConnectPrompt from '../../components/ConnectPrompt.svelte'
-  import { rememberStream, streamPosition } from '../navigation/stream-position'
-  import { FirstScreen, provideFirstScreen, revealStream } from '../../shared/first-screen.svelte'
-  import FirstScreenRow from '../../shared/FirstScreenRow.svelte'
+  import { rememberStream } from '../navigation/stream-position'
+  import { postList } from '../../shared/post-list.svelte'
+  import PostListRow from '../../shared/PostListRow.svelte'
   import Loading from '../../shared/Loading.svelte'
   import { loadingDelay } from '../../shared/loading-delay.svelte'
   import { visitPlace } from '../navigation/visit-position'
@@ -29,15 +29,7 @@
   const place = visitPlace()
   let identity = $derived(`notifications/${chain.id}/${wallet.account}`)
   const spinnerReady = loadingDelay(() => wallet.account ? identity : null)
-  let entrance = $derived.by(() => {
-    const key = identity
-    return untrack(() => wallet.account && !streamPosition(key, place.streams) ? new FirstScreen() : null)
-  })
-  provideFirstScreen(() => entrance)
-  $effect(() => {
-    const screen = entrance
-    return () => screen?.finish()
-  })
+  postList('reading notifications…', spinnerReady)
 
   const activity = $derived(wallet.account ? new NotificationActivity(host.status?.chains ?? [chain], wallet.account, host.status?.keyrings) : null)
   // Only explicit refreshes reset the trade cursor; loading older rows keeps the same head.
@@ -58,16 +50,6 @@
     const me = wallet.account
     const visit = me ? notificationDot.begin(me) : null
     return activity && visit ? activity.load(requested, refreshToken).then(list => ({ ...list, visit })) : null
-  })
-
-  $effect(() => {
-    const request = references, screen = entrance
-    let current = true
-    request?.then(
-      () => { if (current) screen?.start() },
-      () => { if (current) screen?.finish() },
-    )
-    return () => { current = false }
   })
 
   // Sample the new page only on an explicit refresh, not on local reloads or paging.
@@ -100,14 +82,13 @@
       onshown={list => notificationDot.saw(list.visit, list.items[0]?.timestamp, list.sourcesRead)}>
       {#snippet children(list)}
       {@const shown = list.items.filter((r) => !muted.has(activityAuthor(r)) && !host.blocked(activityAuthor(r)))}
-      {#if entrance?.waiting}{@render loadingNotifications()}{/if}
-      <div use:revealStream={entrance} inert={entrance?.waiting ?? false} style:visibility={entrance?.waiting ? 'hidden' : undefined} use:rememberStream={{ key: identity, limit: list.limit, positions: place.streams }}>
+      <div use:rememberStream={{ key: identity, limit: list.limit, positions: place.streams }}>
       {#if list.keyError}<p class="err small">could not update key activity. <button onclick={() => again++}>try again</button></p>{/if}
       {#if shown.length === 0}
         <p class="dim">{list.complete ? 'no notifications found.' : 'no notifications in these results.'}</p>
       {/if}
       {#each shown as r (activityId(r))}
-        <FirstScreenRow id={activityId(r)}>
+        <PostListRow feedId={activityId(r)}>
           {#if r.kind === 'key-trade' || r.kind === 'key-received'}
             <KeyTradeNotification notice={r} creator={wallet.account!} showChain={r.chain.id !== chain.id} />
           {:else}
@@ -120,7 +101,7 @@
           <!-- Nothing here lists what you write, so the reply's own thread shows it. -->
           <InlineReply chain={r.chain} id={r.post.id} />
           {/if}
-        </FirstScreenRow>
+        </PostListRow>
       {/each}
       {#if !list.complete}
         <nav class="stream-paging" aria-label="notification pagination">

@@ -62,7 +62,7 @@ for (const terminal of ['1', '2']) test(`deleting or removing an attached parent
   await expect(card(page, 234)).toBeVisible()
   await expect(page.getByRole('link', { name: /in reply to (?:.* )?#233.*(?:deleted|removed)/ })).toBeVisible()
 })
-test('a pending parent keeps its attached preview labelled after the display timeout', async ({ page, host }) => {
+test('a pending parent keeps its preview visible until the replacement cards are ready', async ({ page, host }) => {
   await setup(page, host, true)
   const started = deferred(), release = deferred()
   await page.route('**/state', async route => {
@@ -70,12 +70,12 @@ test('a pending parent keeps its attached preview labelled after the display tim
     started.resolve(); await release.promise; await route.fallback()
   })
   try {
+    const preview = await card(page, 234).elementHandle()
     await card(page, 230).getByRole('button', { name: '1 more reply', exact: true }).click()
     await started.promise
-    await expect(page.locator('.reply-list').first()).not.toHaveClass(/preparing/, { timeout: 6000 })
-    await expect(card(page, 233)).toHaveCount(0)
-    await expect(card(page, 234)).toBeVisible()
-    await expect(page.getByRole('link', { name: /^in reply to (?:.* )?#233$/ })).toBeVisible()
+    await expect(page.locator('.reply-list').first()).toHaveClass(/preparing/)
+    expect(await preview.isVisible()).toBe(true)
+    await expect(card(page, 234)).toHaveCount(1)
     release.resolve()
     await expect(card(page, 233)).toBeVisible()
     await expect(page.getByRole('link', { name: /^in reply to (?:.* )?#233$/ })).toHaveCount(0)

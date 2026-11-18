@@ -2,17 +2,17 @@
   // Refresh changes the snippet's arguments, not its lifetime, so keyed rows,
   // focus, image state and open reply branches survive the new result.
   import type { Snippet } from 'svelte'
-  import { firstDisplay } from './first-screen.svelte'
+  import { firstDisplay } from './post-list.svelte'
   import { Resource } from './resource.svelte'
   import LoadError from './LoadError.svelte'
   import Loading from './Loading.svelte'
 
-  let { request, identity = null, loading = 'loading…', what, children, onretry, onshown, settleFirstScreen = false }: {
+  let { request, identity = null, loading = 'loading…', what, children, onretry, onshown, settleDisplay = false }: {
     request: Promise<T>
     identity?: unknown
     loading?: string | Snippet
     /** Include this read in an enclosing stream row's initial reveal. */
-    settleFirstScreen?: boolean
+    settleDisplay?: boolean
     /** What failed to load, for the error line. */
     what?: string
     children: Snippet<[T]>
@@ -23,7 +23,7 @@
   $effect(() => view.watch(request, identity, onshown))
   let result = $derived(view.result?.key === identity ? view.result : null)
   let error = $derived(view.failure(identity))
-  firstDisplay(() => !settleFirstScreen || result !== null || error !== null)
+  firstDisplay(() => !settleDisplay || result !== null || error !== null)
 </script>
 
 {#if result}

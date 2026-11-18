@@ -6,8 +6,8 @@
   // the rows a control reveals more cached groups before walking further
   // back. A refresh retains every still-selected displayed row; returning to a stream
   // within a visit restores its shown rows and reading position. A browser reload resets it.
-  import { onDestroy, untrack } from 'svelte'
-  import { FirstScreen, provideFirstScreen, revealStream } from '../../shared/first-screen.svelte'
+  import { untrack } from 'svelte'
+  import { postList } from '../../shared/post-list.svelte'
   import { feedKey, mountFeed, loadFeed, resumeFeed, olderFeed, peekFeed, type Page } from './feed'
   import { appliesMutes, type Filter } from './feed-policy'
   import { refreshCue } from '../../shared/refresh-cue.svelte'
@@ -21,7 +21,7 @@
   import Empty from '../../shared/Empty.svelte'
   import ConversationRow from './ConversationRow.svelte'
   import Retained from '../../shared/Retained.svelte'
-  import FirstScreenRow from '../../shared/FirstScreenRow.svelte'
+  import PostListRow from '../../shared/PostListRow.svelte'
   import KeyActivityRow from '../keys/KeyActivityRow.svelte'
   import { EveryoneActivity, postActivity, type ActivityPage } from './everyone-activity'
   import { host } from '../../lib/host.svelte'
@@ -54,15 +54,11 @@
     void result.then(p => { if (activity === current && current?.keys.revision !== revision && !p.keyError) onactivitychange?.(false) }, () => {})
     return result
   }
-  let entrance = $state.raw<FirstScreen | null>(null)
-  const shownRows = $derived(entrance?.shownRows ?? null)
-  const holdScreen = $derived(entrance?.waiting && shownRows === null)
-  provideFirstScreen(() => walk?.base === page ? walk.screen : entrance)
-  onDestroy(() => { entrance?.finish(); walk?.screen.finish() })
   let inPlaceReloadRevision = $state(0)
   let identity = $derived(feedKey(chain, filter))
   // One delay spans the page read and its cards preparing their first display.
   const spinnerReady = untrack(() => waited) ?? loadingDelay(() => identity)
+  const { list } = postList('loading posts…', spinnerReady)
   $effect(() => {
     const current = chain, selection = filter
     // Only a new chain or filter mounts the stream again. A resumed mount reads
@@ -118,14 +114,7 @@
       loaded = key
       const saved = firstLoad ? streamPosition(key, positions) : undefined
       resuming = !!saved
-      entrance?.finish()
-      walk?.screen.finish()
       walk = null
-      if (firstLoad) {
-        const homeStream = currentFilter.kind === 'timeline' || currentFilter.kind === 'following'
-        entrance = new FirstScreen(homeStream && !saved ? 'ordered' : 'screen')
-      }
-      const screen = entrance
       const posts = (saved || fold) && !press
         ? resumeFeed(currentChain, currentFilter, saved?.limit, !fold)
         : loadFeed(currentChain, currentFilter, { preserveVisibleRows: !firstLoad, preservePreviews: !press })
@@ -135,8 +124,8 @@
       if (firstLoad || currentRefresh !== seenRefresh) gateRefreshReady = read
       seenRefresh = currentRefresh
       read.then(
-        () => { if (page === read) { screen?.start(); onsettled?.(currentReload, true) } },
-        () => { if (page === read) { screen?.finish(); onsettled?.(currentReload, false) } },
+        () => { if (page === read) onsettled?.(currentReload, true) },
+        () => { if (page === read) onsettled?.(currentReload, false) },
       )
       return press ? refreshCue.during(read) : undefined
     })
@@ -157,24 +146,21 @@
    * retained view as a refresh, so a later refresh keeps the walked page on
    * screen until it finishes. The reader serializes walks and refreshes.
    */
-  type Walk = { base: Promise<ActivityPage>; request: Promise<ActivityPage>; looking: boolean; known: Set<string>; screen: FirstScreen }
+  type Walk = { base: Promise<ActivityPage>; request: Promise<ActivityPage>; looking: boolean }
   let walk = $state.raw<Walk | null>(null)
   let request = $derived(walk?.base === page ? walk.request : page)
   const paging = $derived(walk?.base === page ? walk : null)
-  const pagingBusy = $derived(!!paging && (paging.looking || paging.screen.waiting))
-  const pagingSpinner = loadingDelay(() => pagingBusy ? paging!.request : null)
+  const pagingBusy = $derived(!!paging && (paging.looking || list.pageRowsPending))
+  const pagingSpinner = loadingDelay(() => paging?.looking ? paging.request : null)
   async function showOlder(shown: ActivityPage) {
     if (!page || pagingBusy) return
     const base = page
     const request = enrich(olderFeed(chain, filter, shown.limit + 20), false, true, 'older')
-    const screen = new FirstScreen('paging')
-    const current = { base, request, looking: true, screen, known: new Set(shown.entries.slice(0, shown.limit).map(row => row.key)) }
+    const current = { base, request, looking: true }
     walk = current
     try {
       await request
-      if (walk?.request === request) screen.start()
     } catch {
-      screen.finish()
       // Retained shows the error with the previous page and a retry.
     } finally {
       if (walk?.request === request) walk = { ...current, looking: false }
@@ -192,9 +178,7 @@
 <div class="stream-start">
 <Retained {request} {identity} loading={loadingPosts} onretry={() => inPlaceReloadRevision++}>
   {#snippet children(p)}
-  {@const w = paging}
-  {#if holdScreen}{@render loadingPosts()}{/if}
-  <div use:revealStream={w && !w.looking ? w.screen : entrance} inert={holdScreen} style:visibility={holdScreen ? 'hidden' : undefined} use:rememberStream={{ key: identity, limit: p.limit, restore: restorePosition, topRequest, positions, arrived: pressed.has(p) ? p : undefined }}>
+  <div use:rememberStream={{ key: identity, limit: p.limit, restore: restorePosition, topRequest, positions, arrived: pressed.has(p) ? p : undefined }}>
   {#if p.keyError}<p class="err small">could not update key activity. <button onclick={() => inPlaceReloadRevision++}>try again</button></p>{/if}
   {#if p.entries.length === 0 && p.complete}
     <Empty>
@@ -208,34 +192,30 @@
     </Empty>
   {:else}
     <!-- A conversation keeps its row when a newer reply becomes the group's lead. -->
-    {#each p.entries.slice(0, p.limit) as entry, i (entry.key)}
-      {@const staged = (shownRows !== null && i >= shownRows) || (!!w?.screen.waiting && !w.known.has(entry.key))}
-      <div data-feed-row={entry.kind === 'post' ? entry.key : undefined} class:staged inert={staged}>
+    {#each p.entries.slice(0, p.limit) as entry (entry.key)}
+      <PostListRow feedId={entry.key}>
         {#if entry.kind === 'key'}
-          <FirstScreenRow id={entry.key}><KeyActivityRow event={entry.event} {chain} /></FirstScreenRow>
+          <KeyActivityRow event={entry.event} {chain} />
         {:else}
           {#key rowOf(entry.row.key)}
           <ConversationRow resume={resuming} {gateRefreshReady} reloadKey={page} {chain} page={p} row={entry.row} {collapseMuted} rowx={rowOf(entry.row.key)} onchanged={() => inPlaceReloadRevision++} />
           {/key}
         {/if}
-      </div>
+      </PostListRow>
     {/each}
     <!-- Stream-wide paging is separate from each card's reply controls.
          Keep the button mounted during a read so keyboard focus stays put. -->
-    {#if shownRows !== null}
-      <div class="stream-opening">{@render loadingPosts()}</div>
-    {/if}
-    <nav class="stream-paging" aria-label="stream pagination" hidden={shownRows !== null}>
+    <nav class="stream-paging" aria-label="stream pagination" hidden={!paging && list.pageRowsPending}>
       {#if p.complete && p.entries.length <= p.limit && !pagingBusy}
         <p class="dim small" role="status">you've reached the end of this stream</p>
       {:else}
         <button aria-disabled={pagingBusy} aria-busy={pagingBusy} onclick={() => showOlder(p)}>
-          <span class="paging-label" class:working={pagingSpinner()}>show more posts<span class="spinner" aria-hidden="true"></span></span>
+          <span class="paging-label" class:working={pagingSpinner() && !list.first}>show more posts<span class="spinner" aria-hidden="true"></span></span>
         </button>
           <p class="operation-status dim small" role="status">
             {#if p.entries.length <= p.limit && p.reach}{p.entries.length === 0 ? 'nothing' : 'posts'} back to {shortDate(p.reach)}{/if}
           </p>
-          {#if pagingSpinner()}<span class="visually-hidden" role="status">loading more posts…</span>{/if}
+          {#if pagingSpinner() && !list.first}<span class="visually-hidden" role="status">loading more posts…</span>{/if}
       {/if}
     </nav>
   {/if}
@@ -246,9 +226,7 @@
 {/if}
 
 <style>
-  .stream-start, .stream-opening { position: relative; }
-  .stream-opening { min-height: 3rem; overflow-anchor: none; }
-  .staged { height: 0; overflow: hidden; visibility: hidden; }
+  .stream-start { position: relative; }
   .stream-paging button::before, .stream-paging button::after { content: none; }
   .paging-label { position: relative; display: inline-block; }
   .paging-label::before { content: '[ '; }

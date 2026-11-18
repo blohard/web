@@ -9,7 +9,7 @@
   import { names } from '../../lib/names.svelte'
   import { href, router } from '../navigation/router.svelte'
   import { hydrateRecords } from './record-images'
-  import { firstDisplay } from '../../shared/first-screen.svelte'
+  import { firstDisplay } from '../../shared/post-list.svelte'
   import type { Quote } from '../../lib/reference-syntax'
   import BodyPreview from './BodyPreview.svelte'
 
