@@ -377,8 +377,11 @@
 {/if}
 
 <style>
-  /* Align with the editor after its 36px avatar and .75rem gap. */
-  .compose-status { display: grid; margin-inline-start: calc(36px + .75rem); font-size: .86em; }
+  /* Align with the editor when there is room for a line of payment controls beside the avatar. */
+  .compose-status {
+    display: grid; container-type: inline-size; font-size: .86em;
+    margin-inline-start: clamp(0px, 100% - 20rem, calc(36px + .75rem));
+  }
   .compose-status > div { grid-area: 1 / 1; min-width: 0; }
   .compose-status > .concealed { visibility: hidden; }
   .compose-status > .transaction-status { min-height: 1lh; }

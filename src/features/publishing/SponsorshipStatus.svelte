@@ -44,7 +44,16 @@
       · <button class="dim" onclick={onRefresh} {disabled}>retry</button>
     {/if}
   {/if}
-  {#if namesEnabled && entry?.eligible !== true && !entry?.error}
-    <span class="dim">{inPlay ? ' · ' : ''}get an <a href="https://app.ens.domains/" target="_blank" rel="noopener noreferrer">ENS</a> or <a href="https://www.base.org/names" target="_blank" rel="noopener noreferrer">Basename</a> for free posting</span>
+  {#if namesEnabled && entry?.eligible === false}
+    <span class="dim">get an <a href="https://app.ens.domains/" target="_blank" rel="noopener noreferrer">ENS</a> or <a href="https://www.base.org/names" target="_blank" rel="noopener noreferrer">Basename</a> for free posting</span>
   {/if}
 </div>
+
+<style>
+  /* Reserve a payment line, including its button padding, before the relay answers.
+     Narrow composers wrap the payment choice onto a second line. */
+  .status { min-height: calc(1lh + .2rem); }
+  @container (width < 20rem) {
+    .status { min-height: calc(2lh + .2rem); }
+  }
+</style>

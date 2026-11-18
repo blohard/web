@@ -1,6 +1,16 @@
 import { test, expect, author, stranger, card, deferred } from './host.mjs'
 import { frames, watchLayout, expectStable } from './layout-watch.mjs'
 
+async function signIn(page) {
+  await page.addInitScript(who => {
+    window.ethereum = { on() {}, removeListener() {}, async request({ method }) {
+      if (method === 'eth_accounts') return [who]
+      if (method === 'eth_chainId') return '0x14a34'
+      throw Object.assign(new Error(`unsupported wallet method ${method}`), { code: 4200 })
+    } }
+  }, author)
+}
+
 for (const width of [1100, 390]) test.describe(`layout at ${width}px`, () => {
   test.use({ viewport: { width, height: 900 } })
 
@@ -72,13 +82,7 @@ for (const width of [1100, 390]) test.describe(`layout at ${width}px`, () => {
     const url = `https://basescan.org/tx/0x${'a'.repeat(64)}`
     host.post(1, `Another token burn: ${url}`)
     host.post(2, 'The receipt is the whole point.', { who: stranger, parent: 1 })
-    await page.addInitScript(who => {
-      window.ethereum = { on() {}, removeListener() {}, async request({ method }) {
-        if (method === 'eth_accounts') return [who]
-        if (method === 'eth_chainId') return '0x14a34'
-        throw Object.assign(new Error(`unsupported wallet method ${method}`), { code: 4200 })
-      } }
-    }, author)
+    await signIn(page)
     await page.goto('/#/notifications')
     const context = card(page, 2).locator('a.context')
     await expect(context).toContainText(url)
@@ -229,3 +233,44 @@ for (const width of [1100, 390]) test.describe(`layout at ${width}px`, () => {
     } finally { release.resolve() }
   })
 })
+
+for (const [width, reason] of [[320, 'curated'], [390, 'ens'], [390, null]]) {
+  test(`phone reload keeps the first post steady as free posting is checked (${width}px, ${reason ?? 'ineligible'})`, async ({ page, host }) => {
+    await page.setViewportSize({ width, height: 840 })
+    host.post(1, 'Already in the stream')
+    await signIn(page)
+    if (reason !== 'ens') {
+      await page.route(`**/api/names/${author}`, route => route.fulfill({ json: { name: null, source: null, avatar: null } }))
+    }
+
+    const relay = deferred(), eligibility = deferred()
+    let reloading = false
+    await page.route('**/api/relay/status', async route => {
+      if (reloading) await relay.promise
+      await route.fulfill({ json: { chains: [{ ...host.chain, name_sponsorship: { ens: true, basenames: true } }] } })
+    })
+    await page.route('**/eligibility/**', async route => {
+      if (reloading) await eligibility.promise
+      await route.fulfill({ json: { address: author, eligible: !!reason, reason, posting_available: !!reason, posting_paused_reason: null } })
+    })
+
+    const status = page.locator('.home-composer .compose-status')
+    const result = !reason ? 'get an ENS' : reason === 'curated' ? 'free via the curated list' : 'free via your ENS name'
+    try {
+      await page.goto('/')
+      await expect(status).toContainText(result)
+      await expect(status).not.toContainText('checking free posting')
+      reloading = true
+      await page.reload()
+      await expect(card(page, 1)).toBeVisible()
+      const finish = await watchLayout(page, [1])
+      relay.resolve()
+      await expect(status).toContainText('checking free posting')
+      await frames(page)
+      eligibility.resolve()
+      await expect(status).toContainText(result)
+      await expect(status).not.toContainText('checking free posting')
+      expectStable(await finish(), [1])
+    } finally { relay.resolve(); eligibility.resolve() }
+  })
+}
