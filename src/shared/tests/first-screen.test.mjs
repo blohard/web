@@ -16,14 +16,14 @@ test('only a settled prefix covers the viewport and its buffer', () => {
   assert.equal(screenReady(Array.from({ length: 30 }, (_, i) => row(i < 24, (i + 1) * 50)), 800), true, 'many small folded rows')
 })
 
-function environment(t, collapsed = false) {
+function environment(t, mode = 'screen') {
   const original = globalThis.window, listeners = new Map()
   globalThis.window = {
     innerHeight: 800,
     addEventListener: (name, listener) => listeners.set(name, listener),
     removeEventListener: name => listeners.delete(name),
   }
-  const screen = new FirstScreen(collapsed)
+  const screen = new FirstScreen(mode)
   t.after(() => { screen.finish(); globalThis.window = original })
   return { screen, listeners }
 }
@@ -65,6 +65,25 @@ test('a parent arriving must let its new card register before measuring the row'
   assert.equal(screen.waiting, false)
 })
 
+test('ordered rows keep the first pending position even after the screen budget expires', async t => {
+  const { screen, listeners } = environment(t, 'ordered')
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  let first = true, second = false
+  screen.row(node(3, 300), () => true)
+  screen.row(node(2, 200), () => second)
+  screen.row(node(1, 100), () => first)
+  screen.start(); screen.mount()
+  await settle()
+  t.mock.timers.tick(3000)
+  assert.equal(screen.shownRows, 1)
+  assert.equal(listeners.size, 0)
+  first = false // An interaction with a visible row cannot hide it or hold up later rows.
+  second = true
+  screen.changed()
+  await settle()
+  assert.equal(screen.waiting, false)
+})
+
 test('the two-second budget starts at page arrival and requires no animation frame', async t => {
   const { screen, listeners } = environment(t)
   t.mock.timers.enable({ apis: ['setTimeout'] })
@@ -97,7 +116,7 @@ test('a resize remeasures the required prefix, and a retired load ignores late a
 })
 
 test('staged paging rows measure their combined height while taking no layout space', async t => {
-  const { screen } = environment(t, true)
+  const { screen } = environment(t, 'paging')
   // Each staging wrapper is zero-height. Its normally sized child still has
   // a measurable height, but all children temporarily begin at the same top.
   const staged = order => ({ ...node(order, 1000), getBoundingClientRect: () => ({ top: 700, bottom: 1000, height: 300 }) })

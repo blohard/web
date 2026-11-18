@@ -85,10 +85,12 @@ for (const delayed of [false, true]) test(`reopening ${delayed ? 'delayed' : 'ca
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowAnchor)).toBe('auto')
 })
 
-test('a late body above the reader still preserves position after expanding replies', async ({ page, host }) => {
+test('a late body from an in-place refresh preserves position after expanding replies', async ({ page, host }) => {
   for (let id = 1; id <= 20; id++) host.post(id, `Post ${id}\nEnough content to make this card readable.`)
-  const slow = host.post(21, 'A slow post\n\n' + 'Additional text that arrives after the reader has scrolled.\n'.repeat(6))
-  host.post(22, 'A reply used to exercise the anchor reset', { parent: 20, who: stranger })
+  host.post(21, 'A reply used to exercise the anchor reset', { parent: 20, who: stranger })
+  await page.goto('/')
+  await expect(card(page, 15)).toBeVisible()
+  const slow = host.post(22, 'A slow post\n\n' + 'Additional text that arrives after the reader has scrolled.\n'.repeat(6))
   const started = deferred(), release = deferred()
   await page.route(`**/api/content/${slow.content_hash}*`, async route => {
     started.resolve()
@@ -96,17 +98,18 @@ test('a late body above the reader still preserves position after expanding repl
     await route.fallback()
   })
   try {
-    await page.goto('/')
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    await page.getByRole('button', { name: /refresh.*new/ }).click()
     await started.promise
     await expect(card(page, 15)).toBeVisible()
     await card(page, 20).getByRole('button', { name: '1 reply', exact: true }).click()
-    await expect(card(page, 22)).toBeVisible()
+    await expect(card(page, 21)).toBeVisible()
     const reader = card(page, 15)
     await reader.evaluate(el => scrollTo(0, scrollY + el.getBoundingClientRect().top - 100))
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     const top = (await reader.boundingBox()).y
     release.resolve()
-    await expect(card(page, 21)).toContainText('Additional text')
+    await expect(card(page, 22)).toContainText('Additional text')
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     expect((await reader.boundingBox()).y).toBeCloseTo(top, 0)
   } finally { release.resolve() }
@@ -491,7 +494,7 @@ test('stream switches show a spinner only after 300 ms, through the first-screen
     await bodyRelease.promise
     await route.fallback()
   })
-  const spinner = page.locator('.stream-start > .loading.overlay[role="status"]')
+  const spinner = page.getByRole('status').filter({ hasText: 'loading posts…' })
   const tabs = page.locator('nav.tabs')
   const top = (await tabs.boundingBox()).y
   try {

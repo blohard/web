@@ -55,6 +55,8 @@
     return result
   }
   let entrance = $state.raw<FirstScreen | null>(null)
+  const shownRows = $derived(entrance?.shownRows ?? null)
+  const holdScreen = $derived(entrance?.waiting && shownRows === null)
   provideFirstScreen(() => walk?.base === page ? walk.screen : entrance)
   onDestroy(() => { entrance?.finish(); walk?.screen.finish() })
   let inPlaceReloadRevision = $state(0)
@@ -119,7 +121,10 @@
       entrance?.finish()
       walk?.screen.finish()
       walk = null
-      if (firstLoad) entrance = new FirstScreen()
+      if (firstLoad) {
+        const homeStream = currentFilter.kind === 'timeline' || currentFilter.kind === 'following'
+        entrance = new FirstScreen(homeStream && !saved ? 'ordered' : 'screen')
+      }
       const screen = entrance
       const posts = (saved || fold) && !press
         ? resumeFeed(currentChain, currentFilter, saved?.limit, !fold)
@@ -162,7 +167,7 @@
     if (!page || pagingBusy) return
     const base = page
     const request = enrich(olderFeed(chain, filter, shown.limit + 20), false, true, 'older')
-    const screen = new FirstScreen(true)
+    const screen = new FirstScreen('paging')
     const current = { base, request, looking: true, screen, known: new Set(shown.entries.slice(0, shown.limit).map(row => row.key)) }
     walk = current
     try {
@@ -188,8 +193,8 @@
 <Retained {request} {identity} loading={loadingPosts} onretry={() => inPlaceReloadRevision++}>
   {#snippet children(p)}
   {@const w = paging}
-  {#if entrance?.waiting}{@render loadingPosts()}{/if}
-  <div use:revealStream={w && !w.looking ? w.screen : entrance} inert={entrance?.waiting ?? false} style:visibility={entrance?.waiting ? 'hidden' : undefined} use:rememberStream={{ key: identity, limit: p.limit, restore: restorePosition, topRequest, positions, arrived: pressed.has(p) ? p : undefined }}>
+  {#if holdScreen}{@render loadingPosts()}{/if}
+  <div use:revealStream={w && !w.looking ? w.screen : entrance} inert={holdScreen} style:visibility={holdScreen ? 'hidden' : undefined} use:rememberStream={{ key: identity, limit: p.limit, restore: restorePosition, topRequest, positions, arrived: pressed.has(p) ? p : undefined }}>
   {#if p.keyError}<p class="err small">could not update key activity. <button onclick={() => inPlaceReloadRevision++}>try again</button></p>{/if}
   {#if p.entries.length === 0 && p.complete}
     <Empty>
@@ -203,8 +208,8 @@
     </Empty>
   {:else}
     <!-- A conversation keeps its row when a newer reply becomes the group's lead. -->
-    {#each p.entries.slice(0, p.limit) as entry (entry.key)}
-      {@const staged = !!w?.screen.waiting && !w.known.has(entry.key)}
+    {#each p.entries.slice(0, p.limit) as entry, i (entry.key)}
+      {@const staged = (shownRows !== null && i >= shownRows) || (!!w?.screen.waiting && !w.known.has(entry.key))}
       <div data-feed-row={entry.kind === 'post' ? entry.key : undefined} class:staged inert={staged}>
         {#if entry.kind === 'key'}
           <FirstScreenRow id={entry.key}><KeyActivityRow event={entry.event} {chain} /></FirstScreenRow>
@@ -217,7 +222,10 @@
     {/each}
     <!-- Stream-wide paging is separate from each card's reply controls.
          Keep the button mounted during a read so keyboard focus stays put. -->
-    <nav class="stream-paging" aria-label="stream pagination">
+    {#if shownRows !== null}
+      <div class="stream-opening">{@render loadingPosts()}</div>
+    {/if}
+    <nav class="stream-paging" aria-label="stream pagination" hidden={shownRows !== null}>
       {#if p.complete && p.entries.length <= p.limit && !pagingBusy}
         <p class="dim small" role="status">you've reached the end of this stream</p>
       {:else}
@@ -238,7 +246,8 @@
 {/if}
 
 <style>
-  .stream-start { position: relative; }
+  .stream-start, .stream-opening { position: relative; }
+  .stream-opening { min-height: 3rem; overflow-anchor: none; }
   .staged { height: 0; overflow: hidden; visibility: hidden; }
   .stream-paging button::before, .stream-paging button::after { content: none; }
   .paging-label { position: relative; display: inline-block; }

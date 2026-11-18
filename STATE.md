@@ -298,10 +298,13 @@ reload. Inline replies and background recovery are unchanged.
 
 ## Initial stream display
 
-On a fresh stream or notifications load, cards mount and make their normal reads inside an invisible,
-inert container, with a centred spinner during the wait (respecting reduced motion).
-Streams and notifications show the spinner only after 300 ms from opening the
-view. One delay covers the page read and card preparation. The profile keys tab
+On a fresh Home stream, including a browser reload, rows start their reads in
+parallel and appear in order. One centred spinner marks the first conversation
+still loading, including any posts quoted inside it. Later rows stay mounted,
+invisible and inert until their turn.
+An unavailable body shows its usual notice and the next ready rows can appear.
+Streams and notifications show their spinner only after 300 ms from opening
+the view. One delay covers the page read and card preparation. The profile keys tab
 shares its delay across loading the code and reading the account, and the home
 keyring tab across reading the keyring and its stream. A stream row's reply count
 keeps one delay from reading the thread through its first list preparing. `loadingDelay`
@@ -310,11 +313,11 @@ its timer, and returning to the same view starts a fresh delay. These page spinn
 remain overlays, so appearing cannot move content.
 Each conversation reports its parent lookup, any open branch's first page, and displayed cards:
 body, parent excerpt and first reply verdict must settle, with failures counting as settled and
-collapsed cards needing no body. After the DOM update, the stream reveals once a
+collapsed cards needing no body. Fresh profile streams and notifications reveal once a
 consecutive settled prefix reaches half a viewport beyond the screen, all rows
 settle, or two seconds pass from the feed page arriving. The reveal observes existing
 reads; it owns no content, verdict cache or extra requests. Automatically opened
-record pictures also wait for decoding or failure within that same budget, so their
+record pictures also wait for decoding or failure, so their
 natural proportions and clipping controls settle before reveal. Names and link
 thumbnails do not hold it up; existing consent and folding rules still apply.
 

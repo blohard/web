@@ -119,6 +119,73 @@ for (const width of [1100, 390]) test.describe(`layout at ${width}px`, () => {
     expectStable(await finish(), [1, 2])
   })
 
+  test('Home reload shows one spinner below the ready posts as bodies arrive out of order', async ({ page, host }) => {
+    const posts = Array.from({ length: 10 }, (_, i) => host.post(i + 1, `Post ${i + 1}\n`.repeat(6)))
+    await page.goto('/')
+    await expect(card(page, 1)).toBeVisible()
+
+    const release = deferred(), fail = deferred()
+    await page.route(`**/api/content/${posts[3].content_hash}*`, async route => {
+      await release.promise
+      await route.fallback()
+    })
+    await page.route(`**/api/content/${posts[1].content_hash}*`, async route => {
+      await fail.promise
+      await route.fulfill({ status: 404 })
+    })
+    try {
+      const lastRead = page.waitForResponse(response => response.url().includes(posts[0].content_hash))
+      await page.reload()
+      await lastRead
+      const spinner = page.locator('.stream-start .loading:visible')
+      await expect(card(page, 5)).toBeVisible()
+      await expect(spinner).toHaveCount(1)
+      await expect(card(page, 3)).toBeHidden()
+      await expect(card(page, 1)).toBeHidden()
+      await spinner.scrollIntoViewIfNeeded()
+      expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+      const finish = await watchLayout(page, [5, 4, 3, 2, 1])
+      const after = async id => {
+        const row = await card(page, id).boundingBox()
+        expect((await spinner.boundingBox()).y).toBeGreaterThanOrEqual(row.y + row.height - 1)
+      }
+      await after(5)
+
+      release.resolve()
+      await expect(card(page, 3)).toBeVisible()
+      await expect(spinner).toHaveCount(1)
+      await expect(card(page, 1)).toBeHidden()
+      await after(3)
+
+      fail.resolve()
+      await expect(card(page, 2)).toBeVisible()
+      await expect(card(page, 1)).toBeVisible()
+      await expect(spinner).toHaveCount(0)
+      expectStable(await finish(), [5, 4, 3, 2, 1])
+    } finally { release.resolve(); fail.resolve() }
+  })
+
+  test('a quoted post finishes loading before Home reveals the posts below it', async ({ page, host }) => {
+    const original = host.post(1, 'Quoted body', { who: stranger })
+    host.post(2, 'The next post in the stream')
+    host.post(3, `See this post\npost://84532/1?commit=${original.commitment}`)
+    const started = deferred(), release = deferred()
+    await page.route(`**/api/content/${original.content_hash}*`, async route => {
+      started.resolve(); await release.promise; await route.fallback()
+    })
+    try {
+      await page.goto('/')
+      await started.promise
+      const finish = await watchLayout(page, [3, 2])
+      await expect(page.getByRole('status').filter({ hasText: 'loading posts…' })).toBeVisible()
+      await expect(card(page, 2)).toBeHidden()
+      release.resolve()
+      await expect(card(page, 3).locator('.quote')).toContainText('Quoted body')
+      await expect(card(page, 2)).toBeVisible()
+      expectStable(await finish(), [3, 2])
+    } finally { release.resolve() }
+  })
+
   test('cold bodies settle before the first visible frame', async ({ page, host }) => {
     host.post(1, 'Conversation')
     const reply = host.post(2, 'Slow reply body.\n'.repeat(5), { parent: 1 })

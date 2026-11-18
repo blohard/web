@@ -15,6 +15,7 @@
   import { timeAgo } from '../../lib/format'
   import { host } from '../../lib/host.svelte'
   import Loading from '../../shared/Loading.svelte'
+  import { openingInOrder } from '../../shared/first-screen.svelte'
   import { muted } from '../../lib/muted.svelte'
   import { href, router } from '../navigation/router.svelte'
   import type { ChainInfo } from '../../lib/types'
@@ -35,6 +36,7 @@
 
   /** The key this card mounted with: loads under it are first loads, and a later one reloads the reference. */
   const mounted = untrack(() => reloadKey)
+  const settleFirstScreen = openingInOrder()
   async function load(c: ChainInfo, id: bigint, pin: Hex | undefined, key: unknown, _attempt: number): Promise<Quoted | null> {
     // A stopped index or failed pin check replaces any retained preview.
     const record = await resolveQuote(c, id, pin, key !== mounted)
@@ -64,7 +66,7 @@
 {:else if quoted}
   <!-- Inside a post body, so the small spinner that keeps a line's height. -->
   {#snippet quoteLoading()}<Loading label="loading the quoted post…" inline />{/snippet}
-  <Retained request={quoted} identity={`${chain.id}/${chain.contract}/${id}/${commit}`} loading={quoteLoading} what="the quoted post" onretry={() => attempt++}>
+  <Retained request={quoted} identity={`${chain.id}/${chain.contract}/${id}/${commit}`} loading={quoteLoading} {settleFirstScreen} what="the quoted post" onretry={() => attempt++}>
     {#snippet children(q)}
     {#if q === null}
       <div class="quote small dim">the quoted post is unavailable or no longer matches this reference.</div>

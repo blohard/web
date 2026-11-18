@@ -1,5 +1,4 @@
-// A fresh stream mounts normally, but reveals only after its first screen
-// settles. Cards keep their reads; this observer owns only the initial reveal.
+// Cards own their reads. This observer controls when their rows first appear.
 import { SvelteSet } from 'svelte/reactivity'
 import { getContext, onDestroy, setContext, tick, untrack } from 'svelte'
 
@@ -24,18 +23,21 @@ export function screenReady(rows: [HTMLElement, () => boolean][], height: number
 
 export class FirstScreen {
   waiting = $state(true)
+  private shown = $state(0)
   private rows = new Map<HTMLElement, () => boolean>()
   private mounted = false
   private queued = false
   private timer: ReturnType<typeof setTimeout> | undefined
   private detach: (() => void) | undefined
 
-  /** Paging rows keep their wrappers collapsed until the new screen is ready. */
-  constructor(private collapsed = false) {}
+  constructor(private mode: 'screen' | 'paging' | 'ordered' = 'screen') {}
+
+  /** On a fresh Home stream, show every ready row up to the first pending one. */
+  get shownRows() { return this.mode === 'ordered' && this.waiting ? this.shown : null }
 
   /** The budget begins when the feed page arrives, not when its request starts. */
   start() {
-    if (this.waiting && this.timer === undefined) this.timer = setTimeout(() => this.finish(), FIRST_DISPLAY_WAIT_MS)
+    if (this.mode !== 'ordered' && this.waiting && this.timer === undefined) this.timer = setTimeout(() => this.finish(), FIRST_DISPLAY_WAIT_MS)
   }
 
   finish() {
@@ -49,12 +51,14 @@ export class FirstScreen {
   mount() {
     this.mounted = true
     if (!this.waiting) return
-    const changed = () => this.changed()
-    window.addEventListener('resize', changed)
-    window.addEventListener('scroll', changed, { passive: true })
-    this.detach = () => {
-      window.removeEventListener('resize', changed)
-      window.removeEventListener('scroll', changed)
+    if (this.mode !== 'ordered') {
+      const changed = () => this.changed()
+      window.addEventListener('resize', changed)
+      window.addEventListener('scroll', changed, { passive: true })
+      this.detach = () => {
+        window.removeEventListener('resize', changed)
+        window.removeEventListener('scroll', changed)
+      }
     }
     this.changed()
   }
@@ -75,12 +79,24 @@ export class FirstScreen {
       this.queued = false
       if (!this.waiting || !this.mounted) return
       const rows = [...this.rows].sort(([a], [b]) => a.compareDocumentPosition(b) & 2 ? 1 : -1)
-      if (screenReady(rows, window.innerHeight, this.collapsed)) this.finish()
+      if (this.mode === 'ordered') {
+        let next = this.shown
+        while (next < rows.length && rows[next][1]()) next++
+        this.shown = next
+        if (next < rows.length) return
+      } else if (!screenReady(rows, window.innerHeight, this.mode === 'paging')) return
+      this.finish()
     })
   }
 }
 
 export function provideFirstScreen(screen: () => FirstScreen | null) { setContext(SCREEN, screen) }
+
+/** Quoted posts share their containing row's spinner on a fresh Home stream. */
+export function openingInOrder(): boolean {
+  const row = getContext<Row | null | undefined>(ROW)
+  return untrack(() => row?.screen.shownRows != null)
+}
 
 /** A row supplies the readiness scope for its context and all of its cards. */
 export function firstScreenRow() {
