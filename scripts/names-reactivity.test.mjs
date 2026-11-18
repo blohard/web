@@ -20,3 +20,21 @@ test('another name arriving does not redraw this one', async () => {
     assert.equal(names.display(other), 'other.eth')
   } finally { view.stop() }
 })
+
+test('adopting the same answer from another tab leaves mounted name readers alone', () => {
+  const address = `0x${'d1'.repeat(20)}`
+  const entry = { name: 'one.eth', source: 'ens', avatar: null, checkedAt: Date.now() }
+  names.adopt({ [address]: entry })
+  const view = watching(address)
+  try {
+    flushSync()
+    const before = view.runs
+    names.adopt({ [address]: { ...entry } })
+    flushSync()
+    assert.equal(view.runs, before)
+    names.adopt({ [address]: { ...entry, name: 'two.eth' } })
+    flushSync()
+    assert.equal(names.display(address), 'two.eth')
+    assert.equal(view.runs, before + 1)
+  } finally { view.stop() }
+})

@@ -155,3 +155,13 @@ test('policy polling waits, skips absent policy, rechecks a return mid-read, and
     assert.equal(cleared, true)
   } finally { stop(); Object.assign(globalThis, saved) }
 })
+
+test('identical policy answers keep their identity while same-revision changes still apply', () => {
+  const original = host.status.host_policy
+  adoptPolicy(structuredClone(mock.hostPolicy))
+  assert.equal(host.status.host_policy, original)
+  adoptPolicy({ ...mock.hostPolicy, admin: address('99') })
+  assert.equal(host.status.host_policy.admin, address('99'))
+  adoptPolicy({ ...host.status.host_policy, blocked: [author] })
+  assert.equal(host.blocked(author), true)
+})

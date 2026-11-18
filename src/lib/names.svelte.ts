@@ -80,7 +80,10 @@ export function pruneNames(entries: Record<string, NameEntry>, now = Date.now())
 function mergeNewest(into: Record<string, NameEntry>, from: Record<string, NameEntry>): Record<string, NameEntry> {
   for (const [k, entry] of Object.entries(from)) {
     const held = into[k]
-    if (!held || !(held.checkedAt > entry.checkedAt)) into[k] = entry
+    if (held && held.checkedAt > entry.checkedAt) continue
+    if (held && held.checkedAt === entry.checkedAt && held.name === entry.name && held.source === entry.source
+      && held.avatar === entry.avatar && held.partial === entry.partial && held.error === entry.error) continue
+    into[k] = entry
   }
   return into
 }

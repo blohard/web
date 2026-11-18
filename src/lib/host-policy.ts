@@ -28,6 +28,9 @@ function checked(policy: HostPolicy): HostPolicy {
     })) throw new Error('invalid host policy')
   return policy
 }
+function sameAccounts(a: Address[] | undefined, b: Address[] | undefined): boolean {
+  return a === b || (!!a && !!b && a.length === b.length && a.every((account, i) => account === b[i]))
+}
 /**
  * A late answer cannot undo a newer one: the admin lists follow their
  * revision and the declarations their own counter, since declaring never
@@ -37,9 +40,15 @@ export function mergePolicy(old: HostPolicy | null | undefined, fresh: HostPolic
   if (fresh === null || !old || old.origin !== fresh.origin) return fresh
   const lists = BigInt(old.revision) > BigInt(fresh.revision) ? old : fresh
   const declared = BigInt(old.declarations ?? 0) > BigInt(fresh.declarations ?? 0) ? old : fresh
-  if (lists === fresh && declared === fresh) return fresh
-  return { ...fresh, revision: lists.revision, curated: lists.curated, blocked: lists.blocked, bots: lists.bots,
-    declarations: declared.declarations, declared_bots: declared.declared_bots }
+  const merged = lists === fresh && declared === fresh ? fresh : {
+    ...fresh, revision: lists.revision, curated: lists.curated, blocked: lists.blocked, bots: lists.bots,
+    declarations: declared.declarations, declared_bots: declared.declared_bots,
+  }
+  if (old.admin === merged.admin && old.admin_chain === merged.admin_chain
+    && old.revision === merged.revision && old.declarations === merged.declarations
+    && sameAccounts(old.curated, merged.curated) && sameAccounts(old.blocked, merged.blocked)
+    && sameAccounts(old.bots, merged.bots) && sameAccounts(old.declared_bots, merged.declared_bots)) return old
+  return merged
 }
 export function adoptPolicy(policy: HostPolicy | null): void {
   if (!host.status) return

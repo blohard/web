@@ -1036,7 +1036,9 @@ test('a host policy answer during a return check keeps the refresh count of a re
     await fulfill(route, answer)
   }, { times: 1 })
   await page.route('**/api/host-policy', async route => {
-    await fulfill(route, await host.answer(route.request()))
+    // A self-declaration changes the policy without invalidating the stream's admin revision.
+    const policy = await (await host.answer(route.request())).json()
+    await route.fulfill({ json: { ...policy, declared_bots: [author], declarations: String(BigInt(policy.declarations) + 1n) } })
     policyDone.resolve()
   }, { times: 1 })
   try {
@@ -1045,7 +1047,7 @@ test('a host policy answer during a return check keeps the refresh count of a re
       window.dispatchEvent(new Event('focus'))
     })
     await Promise.all([started.promise, policyDone.promise])
-    await page.clock.runFor(100)
+    await expect(card(page, 15).getByRole('img', { name: 'bot · declared by this account' })).toBeVisible()
     const finished = page.waitForEvent('requestfinished', { predicate: feedCheck })
     release.resolve()
     await finished

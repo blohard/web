@@ -64,8 +64,8 @@
   $effect(() => {
     const current = chain, selection = filter
     // Only a new chain or filter mounts the stream again. A resumed mount reads
-    // the host policy to take its count, and must not follow it: each policy
-    // poll would mount the stream again and drop the count of a check in flight.
+    // the host policy to take its count. Following that read would let a policy
+    // change remount the stream and drop the count of a check in flight.
     return untrack(() => {
       const cue = refreshCue.cueCount()
       const resume = !!streamPosition(feedKey(current, selection), positions)
