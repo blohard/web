@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { loadingDelay } from '../../shared/loading-delay.svelte'
   import type { SponsorshipEntry } from './sponsorship.svelte'
 
   let { entry, offered, payMyself, automatic = false, namesEnabled = false, disabled = false, onToggle, onRefresh }: {
@@ -13,7 +14,9 @@
   } = $props()
   let active = $derived(offered && entry?.eligible === true && entry.posting_available === true && !payMyself)
   let paused = $derived(entry?.eligible === true && entry.posting_available === false)
-  let checking = $derived(offered && entry?.eligible == null)
+  const unchecked = $derived(offered && entry?.eligible == null)
+  const slowCheck = loadingDelay(() => unchecked && !entry?.error && !payMyself ? true : null)
+  const checking = $derived(slowCheck() || (unchecked && !!entry?.error))
   let via = $derived(entry?.reason === 'ens' ? 'your ENS name' : entry?.reason === 'basename' ? 'your Basename' : 'the curated list')
   // Explain an automatic paid fallback; an explicit paid choice needs no reminder.
   let inPlay = $derived(automatic || (!payMyself && (active || paused || checking || (offered && entry?.eligible === true))))

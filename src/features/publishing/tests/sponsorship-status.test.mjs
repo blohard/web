@@ -40,9 +40,7 @@ test('paying gas goes unsaid, and eligible users who chose to pay can switch bac
 
 test('checking, unavailable and ineligible states are distinct', async () => {
   const checking = await render({ entry: undefined, namesEnabled: true })
-  assert.match(checking, /checking free posting/)
-  assert.match(checking, /pay my own gas/)
-  assert.doesNotMatch(checking, />retry<|get an/)
+  assert.doesNotMatch(checking, /checking free posting|pay my own gas|>retry<|get an/)
   const unknown = await render({ entry: { eligible: null, reason: null, error: 'RPC unavailable', at: 0 }, namesEnabled: true })
   assert.match(unknown, /free posting check failed/)
   assert.match(unknown, />retry<\/button>\s+or <button[^>]*>pay my own gas<\/button>/)

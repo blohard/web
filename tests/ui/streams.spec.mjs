@@ -625,6 +625,36 @@ async function publication(page, host, { id = 2, parent = 0, text = 'A posted me
   return { signed, receipt, uploaded, text }
 }
 
+for (const slow of [false, true]) test(`a ${slow ? 'slow' : 'quick'} free-posting check on a phone only shows the pending controls after 300 ms`, async ({ page, host }) => {
+  await page.setViewportSize({ width: 390, height: 840 })
+  await publication(page, host)
+  await page.route(`**/api/names/${author}`, route => route.fulfill({ json: { name: null, source: null, avatar: null } }))
+  const started = deferred(), release = deferred()
+  await page.route('**/eligibility/**', async route => {
+    started.resolve()
+    await release.promise
+    await route.fulfill({ json: { address: author, eligible: false, reason: null } })
+  })
+  await page.clock.install({ time: new Date('2026-10-04T12:00:00Z') })
+  await page.clock.pauseAt(new Date('2026-10-04T12:00:01Z'))
+  const status = page.locator('.home-composer .compose-status')
+  try {
+    await page.goto('/')
+    await started.promise
+    await page.clock.runFor(299)
+    await expect(status).toHaveText('')
+    if (slow) {
+      await page.clock.runFor(1)
+      await expect(status).toContainText('checking free posting')
+      await expect(status.getByRole('button', { name: /pay my own gas/ })).toBeVisible()
+    }
+    release.resolve()
+    await expect(status).toContainText('get an ENS')
+    await page.clock.runFor(300)
+    await expect(status).not.toContainText(/checking free posting|pay my own gas/)
+  } finally { release.resolve() }
+})
+
 for (const width of [1100, 390]) for (const reply of [false, true]) test(`a confirmed ${reply ? 'reply' : 'post'} is selected without moving the reader at ${width}px`, async ({ page, host }) => {
   await page.setViewportSize({ width, height: 900 })
   for (let id = 1; id <= 12; id++) host.post(id, `Post ${id}\n\nEnough room to keep reading while the wallet is pending.\n\nAnother paragraph.`)
