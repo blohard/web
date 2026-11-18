@@ -350,7 +350,8 @@ fetching (a disk hit does not restart that clock), failures and refusals for
 one hour. Fresh reads move an entry to the end of the cache; insertions drop
 expired entries, then the least recently read until at most 256 answers and
 32 MiB of blob bytes remain. IndexedDB keeps the existing seven-day cache,
-pruned on its first use in a page. Memory eviction leaves those disk copies.
+pruned in short background transactions after the first disk lookup. Memory
+eviction leaves those disk copies.
 
 Each mounted `Avatar` owns its object URL and revokes it when its account or
 source changes, or when it unmounts. Late results for an old identity create

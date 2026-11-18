@@ -1,6 +1,7 @@
 // Untrusted avatar bytes are bounded before display, including cached types.
 import assert from 'node:assert/strict'
 import { after, beforeEach, test } from 'node:test'
+import { IDBCursor } from 'fake-indexeddb'
 import { load, install, teardown, address, bigBody } from './harness.mjs'
 const { Avatars } = await load('lib/avatars.ts')
 const { tx, STORES } = await load('lib/db.ts')
@@ -83,7 +84,7 @@ test('a failed avatar is asked about again after an hour, not kept for the life 
   assert.equal(calls, 2)
 })
 
-test('the cache keeps a week of reading: expired entries are dropped the first time it is used', async () => {
+test('the cache keeps a week of reading: a disk hit returns before expired entries are swept', async t => {
   const day = 24 * 60 * 60_000
   const stale = address('b1'), fresh = address('b2'), freshUrl = 'https://pics.invalid/fresh.png'
   const png = () => new Blob(['png'], { type: 'image/png' })
@@ -93,11 +94,31 @@ test('the cache keeps a week of reading: expired entries are dropped the first t
   })
   const calls = []
   globalThis.fetch = async (url) => { calls.push(url); return new Response('png', { headers: { 'content-type': 'image/png' } }) }
+  const advance = t.mock.method(IDBCursor.prototype, 'continue')
   const cache = new Avatars()
   assert.ok(await cache.read(fresh, freshUrl) instanceof Blob, 'the fresh entry is served from disk')
+  assert.equal(advance.mock.callCount(), 0, 'cleanup did not precede the requested picture')
   assert.deepEqual(calls, [], 'without a fetch')
   const kept = await tx(STORES.avatars, 'readonly', (s) => s.getAllKeys())
   assert.deepEqual(kept, [fresh], 'the expired entry is gone')
+})
+
+test('expiry cleanup continues past a batch ending on a deleted key', async t => {
+  const url = 'https://pics.invalid/avatar.png'
+  const blob = new Blob(['png'], { type: 'image/png' })
+  const now = Date.now(), expired = now - 8 * 24 * 60 * 60_000
+  const fresh = address('ff')
+  await tx(STORES.avatars, 'readwrite', store => {
+    for (let i = 0; i < 150; i++) {
+      store.put({ address: address(i.toString(16).padStart(2, '0')), url, blob, fetchedAt: expired })
+    }
+    store.put({ address: fresh, url, blob, fetchedAt: now })
+  })
+  assert.ok(await avatars.read(fresh, url) instanceof Blob)
+  await t.waitFor(async () => {
+    const keys = await tx(STORES.avatars, 'readonly', store => store.getAllKeys())
+    assert.deepEqual(keys, [fresh])
+  })
 })
 
 test('mounted readers share one download and receive the same blob without creating URLs', async (t) => {

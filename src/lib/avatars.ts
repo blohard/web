@@ -13,6 +13,7 @@ type Cached = { address: string; url: string; blob: Blob; fetchedAt: number }
 const TTL = 7 * 24 * 60 * 60_000
 const MAX_BYTES = 1 << 20
 const TIMEOUT_MS = 15_000
+const PRUNE_BATCH = 64
 const MAX_ENTRIES = 256
 const MAX_CACHED_BYTES = 32 << 20
 /** A failure or refusal is asked about again after an hour; only a picture is kept longer. */
@@ -37,21 +38,27 @@ export class Avatars {
   // evicting here must not invalidate them or start new requests from them.
   private ready = new Map<string, Entry>()
   private inflight = new Map<string, Promise<Picture>>()
-  /** The one sweep of expired entries, made the first time the cache is read in this page. */
-  private pruned: Promise<void> | undefined
+  private pruning: Promise<void> | undefined
 
-  private prune(): Promise<void> {
-    this.pruned ??= across([STORES.avatars], 'readwrite', (t) => {
-      const cutoff = Date.now() - TTL
-      const request = t.objectStore(STORES.avatars).openCursor()
-      request.onsuccess = () => {
-        const cursor = request.result
-        if (!cursor) return
-        if ((cursor.value as Cached).fetchedAt < cutoff) cursor.delete()
-        cursor.continue()
-      }
-    }).catch(() => {})
-    return this.pruned
+  /** Short transactions let new picture reads through during a large sweep. */
+  private async prune() {
+    const cutoff = Date.now() - TTL
+    let after: IDBValidKey | undefined
+    do {
+      const range = after === undefined ? undefined : IDBKeyRange.lowerBound(after, true)
+      after = undefined
+      await across([STORES.avatars], 'readwrite', t => {
+        const request = t.objectStore(STORES.avatars).openCursor(range)
+        let seen = 0
+        request.onsuccess = () => {
+          const cursor = request.result
+          if (!cursor) return
+          if ((cursor.value as Cached).fetchedAt < cutoff) cursor.delete()
+          if (++seen === PRUNE_BATCH) after = cursor.key
+          else cursor.continue()
+        }
+      })
+    } while (after !== undefined)
   }
 
   /** Share blobs, never object URLs. Each mounted avatar owns its URL's lifetime. */
@@ -90,8 +97,8 @@ export class Avatars {
 
   private async load(address: string, url: string): Promise<Entry> {
     try {
-      await this.prune()
       const hit = await tx<Cached | undefined>(STORES.avatars, 'readonly', (s) => s.get(address) as IDBRequest<Cached | undefined>).catch(() => undefined)
+      this.pruning ??= this.prune().catch(() => {})
       if (hit && hit.url === url && Date.now() - hit.fetchedAt < TTL && showable(hit.blob.type) && hit.blob.size <= MAX_BYTES) {
         return { picture: hit.blob, at: hit.fetchedAt }
       }
