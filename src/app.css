@@ -148,7 +148,6 @@ aside.right {
 .wallet { display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; min-height: 1.9rem; max-width: 100%; }
 /* A long name is trimmed with an ellipsis rather than wrapping or running past the edge. */
 .wallet .account { display: inline-flex; align-items: center; gap: 0.4rem; max-width: 100%; min-width: 0; color: var(--fg); white-space: nowrap; }
-.wallet .account .avatar { flex-shrink: 0; }
 .wallet .account .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .wallet .wallet-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.6rem; }
 .wallet-error { text-align: right; max-width: 14rem; }
@@ -278,6 +277,7 @@ section.profile { display: flex; gap: 1rem; align-items: center; padding: 1rem; 
 .person-row { padding: 0.6rem 1rem; border-top: 1px dashed var(--border); align-items: center; }
 
 /* Avatars: the identicon fallback, and a fetched picture in the same frame. */
+.avatar { flex-shrink: 0; }
 svg.avatar { display: block; border: 1px solid var(--border); }
 svg.avatar .bg { fill: var(--tint); }
 svg.avatar .a { fill: var(--accent); }
@@ -360,7 +360,6 @@ article.msg .body img { max-width: 100%; }
 .composer { padding: 0.8rem 1rem 0.6rem; border-bottom: 1px dashed var(--border); }
 .composer.reply { border-top: 1px dashed var(--border); }
 .composer .compose-row { display: flex; gap: 0.75rem; align-items: flex-start; }
-.composer .compose-row .avatar { flex-shrink: 0; }
 .composer textarea {
   border: 1px dashed var(--border); background: var(--tint); padding: 0.5rem 0.6rem;
   font-size: 1.05em; min-height: 4.6rem;

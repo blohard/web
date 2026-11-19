@@ -20,6 +20,38 @@ async function configure(page, host, read) {
 }
 const activity = page => page.locator('[data-feed-row^="key/"]')
 
+test('a purchase keeps its avatar space while the buyer picture loads', async ({ page, host }) => {
+  await page.setViewportSize({ width: 360, height: 800 })
+  const item = purchase(30)
+  item.event.holder = author
+  item.event.creator = stranger
+  await configure(page, host, () => ({ items: [item], next: null }))
+
+  const release = deferred()
+  await page.route('https://avatars.invalid/alice.png', async route => {
+    await release.promise
+    await route.fallback()
+  })
+  const row = activity(page)
+  const geometry = () => row.evaluate(node => {
+    const { width, height } = node.querySelector('.avatar').getBoundingClientRect()
+    return { width, height, textLeft: node.querySelector('.activity-link').getBoundingClientRect().left }
+  })
+  let before
+  await page.goto('/')
+  try {
+    await expect(row).toContainText("alice.eth just bought 2 of bob.eth's keys!")
+    await expect(row.locator('svg.avatar')).toBeVisible()
+    before = await geometry()
+  } finally { release.resolve() }
+
+  const picture = row.locator('img.avatar')
+  await expect(picture).toBeVisible()
+  await picture.evaluate(img => img.decode())
+  expect(await geometry()).toEqual(before)
+  expect(before).toMatchObject({ width: 32, height: 32 })
+})
+
 test('Everyone interleaves purchases and transfers; whole cards open the key owner; other streams stay posts only', async ({ page, host }) => {
   host.policy([author])
   host.post(20, 'ordinary post')
