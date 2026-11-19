@@ -17,7 +17,6 @@
   const keyChain = $derived(initialChainId(chains.filter(c => host.keyringMarket(c.id)), null) ?? initialChainId(chains, null) ?? 84532)
   let curated = $derived(chains.some((c) => c.curated))
   let relayer = $derived((host.relay?.chains.length ?? 0) > 0)
-  let faucet = $derived(host.relay?.chains.some((c) => c.faucet) ?? false)
   let attachments = $derived(host.status?.store?.attachments ?? null)
   let storesContent = $derived(host.status?.store != null)
 </script>
@@ -202,8 +201,7 @@
     reading needs nothing. to post, connect a wallet on one of the chains this host serves, and the app offers to
     add the chain to your wallet if it lacks it. on a phone, {#if mobileConnector}choose {mobileConnector.name} here
     and approve in its app, then return to your browser, or {/if}choose Coinbase Wallet to connect with a passkey.
-    {#if mobileConnector?.notice}the phone connection uses <a href={mobileConnector.notice}>licensed software</a>. {/if}a post costs gas unless you qualify for free posting, and on a test chain that gas is test ether from a faucet.
-    {#if faucet}this host runs one. connect a wallet, and a button beside it offers test ether while your account has none.{/if}
+    {#if mobileConnector?.notice}the phone connection uses <a href={mobileConnector.notice}>licensed software</a>. {/if}a post costs gas unless you qualify for free posting.
     {#if curated}for free posting, use an eligible name you own if this host supports it, or ask the host to add you to its list. only listed accounts get the badge and curated feed placement.{/if}
   </p>
 
