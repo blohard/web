@@ -315,8 +315,8 @@ saved positions through the navigation helpers.
 Stream and notification indicators wait 300 ms across the page read and card
 preparation. The Home keyring also shares its delay with the preceding keyring
 read. A reply button can carry the indicator when it opens a branch. Paging
-keeps the button mounted while the request runs. Once the page arrives, the
-first unfinished row carries the indicator.
+keeps the button mounted while the request runs. Each press starts a fresh
+300 ms delay shared by the button and the first unfinished row.
 
 ## Recent body and keyring reads
 

@@ -58,7 +58,7 @@
   let identity = $derived(feedKey(chain, filter))
   // One delay spans the page read and its cards preparing their first display.
   const spinnerReady = untrack(() => waited) ?? loadingDelay(() => identity)
-  const { list } = postList('loading posts…', spinnerReady)
+  const { list } = postList('loading posts…', () => paging ? pagingSpinner() : spinnerReady())
   $effect(() => {
     const current = chain, selection = filter
     // Only a new chain or filter mounts the stream again. A resumed mount reads
@@ -151,7 +151,9 @@
   let request = $derived(walk?.base === page ? walk.request : page)
   const paging = $derived(walk?.base === page ? walk : null)
   const pagingBusy = $derived(!!paging && (paging.looking || list.pageRowsPending))
-  const pagingSpinner = loadingDelay(() => paging?.looking ? paging.request : null)
+  // The button and the rows it reveals share one delay per press.
+  const pagingSpinner = loadingDelay(() => paging?.request ?? null)
+  const showButtonSpinner = $derived(paging?.looking && !list.first && pagingSpinner())
   async function showOlder(shown: ActivityPage) {
     if (!page || pagingBusy) return
     const base = page
@@ -210,12 +212,12 @@
         <p class="dim small" role="status">you've reached the end of this stream</p>
       {:else}
         <button aria-disabled={pagingBusy} aria-busy={pagingBusy} onclick={() => showOlder(p)}>
-          <span class="paging-label" class:working={pagingSpinner() && !list.first}>show more posts<span class="spinner" aria-hidden="true"></span></span>
+          <span class="paging-label" class:working={showButtonSpinner}>show more posts<span class="spinner" aria-hidden="true"></span></span>
         </button>
           <p class="operation-status dim small" role="status">
             {#if p.entries.length <= p.limit && p.reach}{p.entries.length === 0 ? 'nothing' : 'posts'} back to {shortDate(p.reach)}{/if}
           </p>
-          {#if pagingSpinner() && !list.first}<span class="visually-hidden" role="status">loading more posts…</span>{/if}
+          {#if showButtonSpinner}<span class="visually-hidden" role="status">loading more posts…</span>{/if}
       {/if}
     </nav>
   {/if}

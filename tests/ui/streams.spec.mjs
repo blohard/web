@@ -527,6 +527,37 @@ test('stream switches show a spinner only after 300 ms, through the first-screen
   }
 })
 
+for (const pageMs of [200, 350]) test(`show more posts shares one spinner delay with a ${pageMs} ms page read`, async ({ page, host }) => {
+  const posts = Array.from({ length: 45 }, (_, i) => host.post(i + 1, `Post ${i + 1}`))
+  await page.clock.install({ time: new Date('2026-10-04T12:00:00Z') })
+  await page.clock.pauseAt(new Date('2026-10-04T12:00:01Z'))
+  await page.goto('/')
+  await expect(card(page, 26)).toBeVisible()
+  await page.clock.runFor(500) // The stream's opening delay has already elapsed.
+  const read = deferred(), body = deferred()
+  await page.route('**/feed', async route => { await read.promise; await route.fallback() }, { times: 1 })
+  await page.route(`**/api/content/${posts[24].content_hash}?*`, async route => { await body.promise; await route.fallback() })
+  const more = page.getByRole('button', { name: '[ show more posts ]', exact: true })
+  const spinners = page.locator('.stream-start .spinner:visible')
+  try {
+    await more.click()
+    await page.clock.runFor(pageMs)
+    await expect(more.locator('.spinner:visible')).toHaveCount(pageMs >= 300 ? 1 : 0)
+    read.resolve()
+    const pending = page.locator('.stream-opening:visible')
+    await expect(pending).toBeVisible()
+    if (pageMs < 300) {
+      await page.clock.runFor(299 - pageMs)
+      await expect(spinners).toHaveCount(0)
+      await page.clock.runFor(1)
+    }
+    await expect(pending.locator('.spinner')).toBeVisible()
+    await expect(spinners).toHaveCount(1)
+  } finally { read.resolve(); body.resolve() }
+  await expect(card(page, 6)).toBeVisible()
+  await expect(spinners).toHaveCount(0)
+})
+
 test('notifications share one spinner delay across the page read and card preparation', async ({ page, host }) => {
   host.post(1, 'My post')
   const reply = host.post(2, 'A notification body', { who: stranger, parent: 1 })
