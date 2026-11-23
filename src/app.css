@@ -326,7 +326,7 @@ article.msg .actions .reply-count.reply-open { position: relative; padding-right
 .expander { padding: 0 1rem 0.5rem 4.1rem; margin-top: -0.2rem; }
 a.more { display: block; padding: 0.6rem 1rem 0.2rem 4.1rem; }
 /* Stream paging spans the column; reply expanders stay inside their cards. */
-.stream-paging { margin-top: 1rem; padding: 1rem; border-top: 1px solid var(--border); background: var(--tint); text-align: center; }
+.stream-paging { padding: 1rem; border-top: 1px solid var(--border); background: var(--tint); text-align: center; }
 .stream-paging button { display: block; width: 100%; min-height: 48px; padding: 0.7rem 1rem; border: 1px solid var(--accent);
   border-radius: 3px; background: var(--bg); color: var(--accent); font-weight: 600; }
 .stream-paging button:hover:not([aria-disabled="true"]) { background: var(--accent); color: var(--bg); }

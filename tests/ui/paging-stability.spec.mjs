@@ -1,4 +1,5 @@
-import { test, expect, author, stranger, card } from './host.mjs'
+import { test, expect, author, stranger, card, deferred } from './host.mjs'
+import { watchLayout, expectStable } from './layout-watch.mjs'
 
 // The first page shows 4 → 65. Paging discovers 5 → 16, also beneath 4.
 // Interleaved conversations put that discovery across the host page boundary.
@@ -48,6 +49,36 @@ for (const width of [1100, 390]) test(`paging appends older conversations withou
   await expect(card(page, 53)).toBeVisible()
   await settle(page)
   expect(await geometry(page)).toEqual(after)
+})
+
+for (const width of [1100, 390]) test(`show more posts keeps the last displayed post in place at ${width}px`, async ({ page, host }) => {
+  await page.setViewportSize({ width, height: 900 })
+  const posts = Array.from({ length: 45 }, (_, i) => host.post(i + 1, `Post ${i + 1}.\nA little context for this conversation.`))
+  await page.goto('/')
+  const more = page.getByRole('button', { name: '[ show more posts ]', exact: true })
+  await expect(card(page, 26)).toBeVisible()
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+  await expect(more).toBeInViewport()
+  await settle(page)
+  await expect(card(page, 26)).toBeInViewport()
+  const divider = (await page.getByRole('navigation', { name: 'stream pagination' }).boundingBox()).y
+  const release = deferred()
+  await page.route(`**/api/content/${posts[24].content_hash}*`, async route => {
+    await release.promise
+    await route.fallback()
+  })
+  const finish = await watchLayout(page, [26])
+  try {
+    await more.click()
+    const pending = page.locator('.stream-opening:visible')
+    await expect(pending.locator('.spinner')).toBeVisible()
+    await expect(pending).toHaveCSS('border-top-width', '1px')
+    expect(Math.abs((await pending.boundingBox()).y - divider)).toBeLessThanOrEqual(1)
+  } finally { release.resolve() }
+  await expect(card(page, 6)).toBeVisible()
+  await expect(more).toHaveAttribute('aria-busy', 'false')
+  expectStable(await finish(), [26])
+  expect(Math.abs((await card(page, 25).boundingBox()).y - divider)).toBeLessThanOrEqual(1)
 })
 
 for (const width of [1100, 390]) test(`profile Replies paging appends older siblings as one conversation at ${width}px`, async ({ page, host }) => {

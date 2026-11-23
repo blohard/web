@@ -32,4 +32,5 @@
 <style>
   .staged { height: 0; overflow: hidden; visibility: hidden; }
   .stream-opening { position: relative; min-height: 3rem; overflow-anchor: none; }
+  [data-feed-row] + .stream-opening { border-top: 1px dashed var(--border); }
 </style>
